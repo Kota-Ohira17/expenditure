@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { TRANSFER_BANKS, VIEWS, type ViewKey } from '#shared/constants'
+import { shortenItemNumbers } from '#shared/itemNumbers'
 import { SHIPPING_RULES, shippingAdvice } from '#shared/shipping'
 
 const { can, entriesTitle } = usePermissions()
@@ -252,7 +253,7 @@ async function setDone(row: Row, done: boolean) {
             <tr class="clickable" :class="{ done: row.status === 'done' }" @click="toggle(row)">
               <td class="c-seq">{{ row.seq }}</td>
               <td class="c-date">{{ dateTime(row.createdAt) }}</td>
-              <td data-label="項目番号">{{ row.itemNumber }}</td>
+              <td data-label="項目番号">{{ shortenItemNumbers(row.itemNumber) }}</td>
               <td class="c-name">{{ row.itemName }}</td>
               <td data-label="数量">{{ row.quantity }}</td>
               <td class="num c-amount">{{ yen(row.amount) }}</td>

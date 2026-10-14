@@ -1,9 +1,10 @@
+import { formatItemNumbers } from '../../shared/itemNumbers'
 import { asc, inArray, sql } from 'drizzle-orm'
 import type { BudgetLine, Entry, EntryItem } from '../db/schema'
 
 /**
  * 選ばれた予算明細を引く。手入力（予算にない項目）のときは空配列と入力された項目番号を返す。
- * 複数の項目番号にまたがる場合は「out-03-02-06, out-03-07-01」のようにまとめる。
+ * 複数の項目番号にまたがる場合は「out-03-02-06, out-03-07-01」のようにまとめ、連続する番号は「out01-04-01~03」と短くする。
  */
 export async function resolveBudgetLines(keys: string[], manualItemNumber: string) {
   if (!keys.length) return { itemNumber: manualItemNumber, lines: [] as BudgetLine[] }
@@ -13,7 +14,7 @@ export async function resolveBudgetLines(keys: string[], manualItemNumber: strin
     throw createError({ statusCode: 400, message: '選んだ予算明細が見つかりません。予算が取り込み直された可能性があるので、ページを再読み込みして選び直してください' })
   }
   const lines = found.sort((a, b) => a.sortOrder - b.sortOrder)
-  return { itemNumber: [...new Set(lines.map(l => l.itemNumber))].join(', '), lines }
+  return { itemNumber: formatItemNumbers(lines.map(l => l.itemNumber)), lines }
 }
 
 /** 予算の表に数量がある明細は、申請でも数量が必要（数量のない明細は空でよい） */
