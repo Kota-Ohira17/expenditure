@@ -117,6 +117,27 @@ Google OAuth を用意していない場合は `.env` で `NUXT_PUBLIC_DEV_LOGIN
 合言葉を知っている人は、他人の ECC メールでも入れます（管理者として入るには管理者用の合言葉が別に必要）。
 本人確認が必要な運用に入る前に、Google ログインか委員会のログイン制度に切り替えてください。
 
+### Slack 通知（n8n）
+`NUXT_N8N_WEBHOOK_URL` に、申請の受付（`created`）と対応済み（`executed`）のたびに次の JSON を POST します。
+
+```json
+{
+  "event": "created",
+  "entry": { "seq": "E-028", "type": "振込", "itemName": "…", "amount": 1000, "details": { … }, "items": [ … ] },
+  "dm": { "email": "xxxx@g.ecc.u-tokyo.ac.jp", "text": "執行依頼を受け付けました（受付番号 E-028）。\n支出項目：…" }
+}
+```
+
+- `entry`：チャンネル投稿用。口座情報と申請者のメールは含みません。
+- `dm`：申請者本人への DM 用。`text` はそのまま送れる本文です（受付の控え／対応済みのお知らせ。口座情報は含みません）。
+
+n8n のワークフローには、チャンネル投稿とは別に次の2ステップを足してください。
+
+1. **メールから Slack のユーザーを探す**：HTTP Request ノードで `GET https://slack.com/api/users.lookupByEmail?email={{$json.body.dm.email}}`（Slack アプリに `users:read.email` スコープが必要）
+2. **DM を送る**：Slack ノードの「Send Message」で、送り先を **User**、ユーザーに 1. の `user.id`、本文に `{{$json.body.dm.text}}`（Slack アプリに `chat:write` スコープが必要）
+
+Slack に登録しているメールが ECC のメールと違う人は 1. で見つからないので、そのノードは「On Error: Continue」にして、DM が送れなくてもチャンネル投稿は止まらないようにしてください。
+
 ### 添付ファイルについて
 Vercel の関数は 4.5MB までしかリクエストを受け取れないため、添付は **4MB まで**。
 スマホ写真は送信前にブラウザで長辺 2000px の JPEG に縮小しています（`app/composables/useSubmit.ts`）。
