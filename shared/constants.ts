@@ -73,7 +73,7 @@ export function budgetChangeOfItems(
 
 export const ACCOUNT_TYPES = ['普通', '当座'] as const
 export const ONLINE_SITES = ['ASKUL', 'モノタロウ', 'Amazon', '楽天', 'アースダンボール'] as const
-export const DELIVERY_PLACES = ['駒場（キャンプラA103）'] as const
+export const DELIVERY_PLACES = ['駒場（A103）', '本郷（6号）'] as const
 export const PAPER_RECEIPT = ['有り', '無し'] as const
 
 export const TRANSFER_BANKS = ['SMBC', 'ゆうちょ'] as const
