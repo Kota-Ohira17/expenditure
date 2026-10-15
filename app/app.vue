@@ -30,8 +30,11 @@ async function logout() {
       <NuxtLink to="/" class="brand">財務管理システム</NuxtLink>
       <span v-if="loggedIn" class="role-badge">{{ roleLabel }}</span>
       <div v-if="loggedIn" class="me">
-        <span class="me-name">{{ user?.name }}</span>
-        <span class="avatar" aria-hidden="true">{{ user?.name?.slice(0, 1) }}</span>
+        <!-- 名前・アイコンから自分の通知設定を開く -->
+        <NuxtLink to="/settings" class="me-link" title="通知設定">
+          <span class="me-name">{{ user?.name }}</span>
+          <span class="avatar" aria-hidden="true">{{ user?.name?.slice(0, 1) }}</span>
+        </NuxtLink>
         <button type="button" class="icon-button" title="ログアウト" aria-label="ログアウト" @click="logout">
           <AppIcon name="logout" />
         </button>

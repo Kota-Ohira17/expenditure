@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import type { Entry } from '../db/schema'
 
 type NotifyEvent = 'created' | 'executed'
@@ -21,9 +22,21 @@ export function dmTextOf(event: NotifyEvent, entry: Entry) {
 }
 
 /**
+ * 申請者への DM の宛先と本文。本人が通知設定で受け取らないようにしていれば null。
+ * 宛先は Slack 用のメール（設定していれば）か、ECC のメール。
+ */
+async function dmFor(event: NotifyEvent, entry: Entry) {
+  const user = await useDb().query.users.findFirst({ where: eq(schema.users.email, entry.applicantEmail) })
+  const wanted = event === 'created' ? (user?.dmOnCreated ?? true) : (user?.dmOnExecuted ?? true)
+  if (!wanted) return null
+  return { email: user?.slackEmail || entry.applicantEmail, text: dmTextOf(event, entry) }
+}
+
+/**
  * n8n の Webhook に通知する（Slack 転送用）。失敗しても申請自体は成功扱いにする。
  * - entry: チャンネルに投稿する内容（口座情報・申請者のメールは除く）
- * - dm: 申請者本人への DM。n8n 側でメールから Slack のユーザーを探して送る（README 参照）
+ * - dm: 申請者本人への DM。n8n 側でメールから Slack のユーザーを探して送る（README 参照）。
+ *   本人が通知設定で受け取らないようにしていれば null（n8n 側は DM を送らない）
  */
 export async function notifyN8n(event: NotifyEvent, entry: Entry) {
   const { n8nWebhookUrl, n8nWebhookSecret } = useRuntimeConfig()
@@ -35,7 +48,7 @@ export async function notifyN8n(event: NotifyEvent, entry: Entry) {
       body: {
         event,
         entry: toNotification(entry),
-        dm: { email: entry.applicantEmail, text: dmTextOf(event, entry) },
+        dm: await dmFor(event, entry),
       },
       timeout: 10_000,
     })

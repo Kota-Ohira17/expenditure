@@ -125,3 +125,12 @@ export const executeSchema = z.object({
   amount: yen.optional(),
   quantity: z.string().trim().optional(),
 })
+
+/** 自分の通知設定（Slack の DM） */
+export const notificationSettingsSchema = z.object({
+  dmOnCreated: z.boolean(),
+  dmOnExecuted: z.boolean(),
+  /** Slack に登録しているメール（ECC のメールと同じなら空） */
+  slackEmail: z.union([z.literal(''), z.string().trim().toLowerCase().pipe(z.email('Slack のメールアドレスの形式で入力してください'))]).default(''),
+})
+export type NotificationSettings = z.infer<typeof notificationSettingsSchema>

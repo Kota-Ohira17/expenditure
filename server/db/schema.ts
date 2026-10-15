@@ -121,6 +121,11 @@ export const users = sqliteTable('users', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   /** 財務局長・管理者が先に登録して、まだログインしていない人は null */
   lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
+  /** Slack の DM を受け取るか（自分の申請を受け付けたとき / 対応済みになったとき）。本人が通知設定で変える */
+  dmOnCreated: integer('dm_on_created', { mode: 'boolean' }).notNull().default(true),
+  dmOnExecuted: integer('dm_on_executed', { mode: 'boolean' }).notNull().default(true),
+  /** Slack に登録しているメール（ECC のメールと違う人だけ）。空なら ECC のメールで Slack のユーザーを探す */
+  slackEmail: text('slack_email').notNull().default(''),
 })
 
 export type User = typeof users.$inferSelect

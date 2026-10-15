@@ -64,6 +64,13 @@
       "when": 1791447345471,
       "tag": "0008_budget_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792040257850,
+      "tag": "0009_notification_settings",
+      "breakpoints": true
     }
   ]
 }
