@@ -21,7 +21,7 @@ function onInput(event: Event) {
   text.value = raw
   const n = parseYenInput(raw)
   invalid.value = n === null
-  el.value?.setCustomValidity(invalid.value ? '数字で入力してください' : '')
+  el.value?.setCustomValidity(invalid.value ? '数字で入力してください。' : '')
   model.value = n === null ? raw : String(n)
 }
 </script>

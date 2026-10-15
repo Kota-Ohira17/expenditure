@@ -94,7 +94,7 @@ function budgetDiff(key: string, budget: number) {
                 placeholder="未入力"
                 @input="setAmount(l.key, ($event.target as HTMLInputElement).value)"
               >
-              <small v-if="invalid[l.key]" class="error">数字で入力してください</small>
+              <small v-if="invalid[l.key]" class="error">数字で入力してください。</small>
               <small v-else-if="budgetDiff(l.key, l.budgetAmount)" class="muted">{{ budgetDiff(l.key, l.budgetAmount) }}</small>
             </td>
           </tr>

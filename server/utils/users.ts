@@ -4,11 +4,11 @@ import { can, PERMISSIONS, ROLES } from '../../shared/roles'
 import type { User } from '../db/schema'
 
 export const roleAssignmentSchema = z.object({
-  role: z.enum(ROLES, { error: '権限を選んでください' }),
+  role: z.enum(ROLES, { error: '権限を選んでください。' }),
 })
 
 export const newUserSchema = roleAssignmentSchema.and(z.object({
-  email: z.string().trim().toLowerCase().pipe(z.email('メールアドレスの形式で入力してください')),
+  email: z.string().trim().toLowerCase().pipe(z.email('メールアドレスの形式で入力してください。')),
   name: z.string().trim().default(''),
 }))
 
@@ -23,7 +23,7 @@ export function toUserView(u: User) {
  */
 export async function assertCanRemoveManager(target: User) {
   if (isBootstrapAdmin(target.email)) {
-    throw createError({ statusCode: 400, message: 'このユーザーは環境変数 NUXT_ADMIN_EMAILS で管理者に固定されています' })
+    throw createError({ statusCode: 400, message: 'このユーザーは環境変数 NUXT_ADMIN_EMAILS で管理者に固定されています。' })
   }
   if (!can(target.role, 'manageUsers')) return
   const u = schema.users
@@ -32,12 +32,12 @@ export async function assertCanRemoveManager(target: User) {
     .from(u)
     .where(and(inArray(u.role, [...PERMISSIONS.manageUsers]), ne(u.email, target.email)))
   if (!row?.others) {
-    throw createError({ statusCode: 400, message: '財務局長・管理者が1人もいなくなるため変更できません' })
+    throw createError({ statusCode: 400, message: '財務局長・管理者が1人もいなくなるため変更できません。' })
   }
 }
 
 export async function findUserOr404(email: string) {
   const user = await useDb().query.users.findFirst({ where: eq(schema.users.email, email) })
-  if (!user) throw createError({ statusCode: 404, message: 'ユーザーが見つかりません' })
+  if (!user) throw createError({ statusCode: 404, message: 'ユーザーが見つかりません。' })
   return user
 }

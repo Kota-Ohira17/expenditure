@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const { payload, file } = await readPayloadAndFile(event)
   const input = parseOr400(evidenceSchema.safeParse(payload))
   if (!file) {
-    throw createError({ statusCode: 400, message: '証憑ファイルを添付してください' })
+    throw createError({ statusCode: 400, message: '証憑ファイルを添付してください。' })
   }
   const { itemNumber, lines } = await resolveBudgetLines(input.budgetLineKeys, input.itemNumber)
   // 予算の表に数量がある明細だけ数量が必須

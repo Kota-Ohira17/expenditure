@@ -138,7 +138,7 @@ const invalidItem = (id: number) => parseYenInput(itemDrafts[id] ?? '') === null
 /** 明細ごとの執行額・数量・取引先を保存する。読めない執行額があれば保存せず false */
 async function saveItems(row: Row) {
   if (row.items.some(i => invalidItem(i.id))) {
-    execErrors.value = ['執行額は数字で入力してください']
+    execErrors.value = ['執行額は数字で入力してください。']
     return false
   }
   const amounts = Object.fromEntries(row.items.map((i) => {
@@ -321,7 +321,7 @@ async function setDone(row: Row, done: boolean) {
                   </table>
                   <p v-if="can('executeEntries')" class="items-actions">
                     <button type="button" class="secondary" :disabled="!itemsChanged(row)" @click="onSaveItems(row)">数量・取引先・執行額を保存</button>
-                    <span v-if="itemsSaved" class="ok">保存しました（申請の金額も明細の合計にそろえました）</span>
+                    <span v-if="itemsSaved" class="ok">保存しました（申請の金額も明細の合計にそろえました）。</span>
                   </p>
                 </div>
                 <dl>

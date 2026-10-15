@@ -23,7 +23,7 @@ async function logout() {
 <template>
   <div class="app">
     <div v-if="envLabel" class="env-banner" role="note">
-      {{ envLabel }}：本物の口座情報や個人情報は入力しないでください
+      {{ envLabel }}：本物の口座情報や個人情報は入力しないでください。
     </div>
 
     <header class="topbar">

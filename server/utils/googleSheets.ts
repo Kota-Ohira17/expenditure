@@ -24,7 +24,7 @@ export function spreadsheetIdOf(input: string) {
 
 async function accessToken() {
   const sa = serviceAccount()
-  if (!sa) throw createError({ statusCode: 500, message: 'スプレッドシート出力用のサービスアカウントが設定されていません（README の「決算シートをスプレッドシートに出力」参照）' })
+  if (!sa) throw createError({ statusCode: 500, message: 'スプレッドシート出力用のサービスアカウントが設定されていません（README の「決算シートをスプレッドシートに出力」参照）。' })
   const now = Math.floor(Date.now() / 1000)
   const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
   const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
@@ -39,13 +39,13 @@ async function accessToken() {
     signature = createSign('RSA-SHA256').update(unsigned).sign(sa.privateKey, 'base64url')
   }
   catch {
-    throw createError({ statusCode: 500, message: 'サービスアカウントの秘密鍵（NUXT_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY）が読み取れません' })
+    throw createError({ statusCode: 500, message: 'サービスアカウントの秘密鍵（NUXT_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY）が読み取れません。' })
   }
   const res = await $fetch<{ access_token: string }>('https://oauth2.googleapis.com/token', {
     method: 'POST',
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${signature}` }),
   }).catch(() => {
-    throw createError({ statusCode: 500, message: 'Google の認証に失敗しました。サービスアカウントの設定を確認してください' })
+    throw createError({ statusCode: 500, message: 'Google の認証に失敗しました。サービスアカウントの設定を確認してください。' })
   })
   return res.access_token
 }
@@ -66,10 +66,10 @@ async function sheetsApi<T>(token: string, path: string, init: { method?: 'GET' 
     if (status === 403 || status === 404) {
       throw createError({
         statusCode: 400,
-        message: `スプレッドシートを開けませんでした。URL が正しいか、スプレッドシートを ${email} と「編集者」として共有しているか確認してください`,
+        message: `スプレッドシートを開けませんでした。URL が正しいか、スプレッドシートを ${email} と「編集者」として共有しているか確認してください。`,
       })
     }
-    throw createError({ statusCode: 502, message: 'スプレッドシートへの書き込みに失敗しました。時間をおいてもう一度試してください' })
+    throw createError({ statusCode: 502, message: 'スプレッドシートへの書き込みに失敗しました。時間をおいてもう一度試してください。' })
   }
 }
 

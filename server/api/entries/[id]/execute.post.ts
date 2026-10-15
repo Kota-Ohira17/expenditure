@@ -25,10 +25,10 @@ export default defineEventHandler(async (event) => {
   const e = schema.entries
 
   const entry = await db.query.entries.findFirst({ where: eq(e.id, id) })
-  if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません' })
+  if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
 
   if (body.done && entry.kind === 'execution' && entry.type === '振込' && !body.bank) {
-    throw createError({ statusCode: 400, message: '振込に使った口座を選んでください' })
+    throw createError({ statusCode: 400, message: '振込に使った口座を選んでください。' })
   }
 
   const [updated] = await db

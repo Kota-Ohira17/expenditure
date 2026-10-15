@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const { amounts, quantities, vendors } = parseOr400(itemsUpdateSchema.safeParse(await readBody(event)))
   const db = useDb()
   const entry = await db.query.entries.findFirst({ where: eq(schema.entries.id, id) })
-  if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません' })
+  if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
 
   const changes = new Map<number, Partial<typeof schema.entryItems.$inferInsert>>()
   const put = (itemId: string, change: Partial<typeof schema.entryItems.$inferInsert>) =>

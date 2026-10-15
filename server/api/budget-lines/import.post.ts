@@ -9,16 +9,16 @@ export default defineEventHandler(async (event) => {
   await requirePermission(event, 'importBudget')
   const parts = (await readMultipartFormData(event)) ?? []
   const file = parts.find(p => p.name === 'file' && p.data.length > 0)
-  if (!file) throw createError({ statusCode: 400, message: 'CSV ファイルを選んでください' })
+  if (!file) throw createError({ statusCode: 400, message: 'CSV ファイルを選んでください。' })
 
   const text = decodeCsv(file.data)
   const lines = parseBudgetCsv(text)
   const kindPart = parts.find(p => p.name === 'kind')?.data.toString()
   // 値は ASCII（main / revised）で受け取る（送信元の文字コードに左右されないように）
   const budgetKind: BudgetKind | null = kindPart === 'main' ? '本予算' : kindPart === 'revised' ? '補正予算' : null
-  if (!budgetKind) throw createError({ statusCode: 400, message: '本予算か補正予算かを選んでください' })
+  if (!budgetKind) throw createError({ statusCode: 400, message: '本予算か補正予算かを選んでください。' })
   if (!lines.length) {
-    throw createError({ statusCode: 400, message: '金額の入った明細が見つかりませんでした。「支出」シートの CSV か確認してください' })
+    throw createError({ statusCode: 400, message: '金額の入った明細が見つかりませんでした。「支出」シートの CSV か確認してください。' })
   }
 
   const db = useDb()

@@ -10,21 +10,21 @@ type Part = NonNullable<Awaited<ReturnType<typeof readMultipartFormData>>>[numbe
 export async function readPayloadAndFile(event: H3Event) {
   const parts = (await readMultipartFormData(event)) ?? []
   const payloadPart = parts.find(p => p.name === 'payload')
-  if (!payloadPart) throw createError({ statusCode: 400, message: 'payload がありません' })
+  if (!payloadPart) throw createError({ statusCode: 400, message: 'payload がありません。' })
   let payload: unknown
   try {
     payload = JSON.parse(payloadPart.data.toString('utf8'))
   }
   catch {
-    throw createError({ statusCode: 400, message: 'payload が JSON ではありません' })
+    throw createError({ statusCode: 400, message: 'payload が JSON ではありません。' })
   }
   const file = parts.find(p => p.name === 'attachment' && p.filename && p.data.length > 0)
   if (file) {
     if (file.data.length > MAX_ATTACHMENT_BYTES) {
-      throw createError({ statusCode: 400, message: 'ファイルは4MB以下にしてください' })
+      throw createError({ statusCode: 400, message: 'ファイルは4MB以下にしてください。' })
     }
     if (!file.type || !ALLOWED_TYPES.includes(file.type)) {
-      throw createError({ statusCode: 400, message: 'PDF または画像ファイルを添付してください' })
+      throw createError({ statusCode: 400, message: 'PDF または画像ファイルを添付してください。' })
     }
   }
   return { payload, file }
@@ -49,7 +49,7 @@ export async function saveAttachment(file: Part, label: string) {
 /** zod のエラーを 400 にする */
 export function parseOr400<T>(result: { success: true, data: T } | { success: false, error: { issues: { message: string }[] } }) {
   if (!result.success) {
-    throw createError({ statusCode: 400, message: '入力内容に誤りがあります', data: result.error.issues.map(i => i.message) })
+    throw createError({ statusCode: 400, message: '入力内容に誤りがあります。', data: result.error.issues.map(i => i.message) })
   }
   return result.data
 }

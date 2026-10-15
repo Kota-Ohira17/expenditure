@@ -50,7 +50,7 @@ export async function requireUser(event: H3Event) {
   const user = await useDb().query.users.findFirst({ where: eq(schema.users.email, session.user.email) })
   if (!user) {
     await clearUserSession(event)
-    throw createError({ statusCode: 401, message: 'もう一度ログインしてください' })
+    throw createError({ statusCode: 401, message: 'もう一度ログインしてください。' })
   }
   const current = toSessionUser(user)
   if (current.role !== session.user.role || current.name !== session.user.name) {
@@ -62,7 +62,7 @@ export async function requireUser(event: H3Event) {
 export async function requirePermission(event: H3Event, permission: Permission) {
   const user = await requireUser(event)
   if (!can(user.role, permission)) {
-    throw createError({ statusCode: 403, message: 'この操作の権限がありません' })
+    throw createError({ statusCode: 403, message: 'この操作の権限がありません。' })
   }
   return user
 }

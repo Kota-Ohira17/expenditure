@@ -11,7 +11,7 @@ export async function resolveBudgetLines(keys: string[], manualItemNumber: strin
   const unique = [...new Set(keys)]
   const found = await useDb().select().from(schema.budgetLines).where(inArray(schema.budgetLines.key, unique))
   if (found.length !== unique.length) {
-    throw createError({ statusCode: 400, message: '選んだ予算明細が見つかりません。予算が取り込み直された可能性があるので、ページを再読み込みして選び直してください' })
+    throw createError({ statusCode: 400, message: '選んだ予算明細が見つかりません。予算が取り込み直された可能性があるので、ページを再読み込みして選び直してください。' })
   }
   const lines = found.sort((a, b) => a.sortOrder - b.sortOrder)
   return { itemNumber: formatItemNumbers(lines.map(l => l.itemNumber)), lines }
@@ -21,7 +21,7 @@ export async function resolveBudgetLines(keys: string[], manualItemNumber: strin
 export function requireItemQuantities(lines: BudgetLine[], itemQuantities: Record<string, string> = {}) {
   const missing = lines.filter(l => l.quantity && !itemQuantities[l.key]?.trim())
   if (missing.length) {
-    throw createError({ statusCode: 400, message: `数量を入力してください（${missing.map(l => l.label.split(' / ').at(-1)).join('、')}）` })
+    throw createError({ statusCode: 400, message: `数量を入力してください（${missing.map(l => l.label.split(' / ').at(-1)).join('、')}）。` })
   }
 }
 

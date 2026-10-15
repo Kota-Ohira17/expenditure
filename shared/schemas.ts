@@ -2,15 +2,15 @@ import { z } from 'zod'
 import { PAPER_RECEIPT, TRANSFER_BANKS } from './constants'
 
 const required = (label: string) => {
-  const message = `${label}を入力してください`
+  const message = `${label}を入力してください。`
   return z.string({ error: message }).trim().min(1, message)
 }
-const date = z.string({ error: '日付を入力してください' }).regex(/^\d{4}-\d{2}-\d{2}$/, '日付を入力してください')
+const date = z.string({ error: '日付を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}$/, '日付を入力してください。')
 /** 日付、または日付＋時刻（執行希望日時） */
-const dateTime = z.string({ error: '日時を入力してください' }).regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, '日時を入力してください')
+const dateTime = z.string({ error: '日時を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, '日時を入力してください。')
 /** 局（略称、または略称のない局は予算の局名）。選択肢は取り込んだ予算によって変わるので文字列で受ける */
-const bureau = z.string({ error: '局を選んでください' }).trim().min(1, '局を選んでください').max(30)
-const yen = z.coerce.number({ error: '金額を数字で入力してください' }).int('整数で入力してください').positive('金額を入力してください')
+const bureau = z.string({ error: '局を選んでください。' }).trim().min(1, '局を選んでください。').max(30)
+const yen = z.coerce.number({ error: '金額を数字で入力してください。' }).int('整数で入力してください。').positive('金額を入力してください。')
 
 export const ITEM_NUMBER_PATTERN = /^out-\d{2}(-\d{2}){1,2}$/
 
@@ -19,9 +19,9 @@ export const ITEM_NUMBER_PATTERN = /^out-\d{2}(-\d{2}){1,2}$/
  * どちらか一方が必要（checkItems で検証）。
  */
 const items = {
-  budgetLineKeys: z.array(z.string()).max(200, '選べる明細は200件までです').default([]),
+  budgetLineKeys: z.array(z.string()).max(200, '選べる明細は200件までです。').default([]),
   /** 明細ごとの実際の執行額（明細の key → 円）。予算額と違うことが多い */
-  itemAmounts: z.record(z.string(), z.coerce.number({ error: '執行額は数字で入力してください' }).int('執行額は整数で入力してください')).default({}),
+  itemAmounts: z.record(z.string(), z.coerce.number({ error: '執行額は数字で入力してください。' }).int('執行額は整数で入力してください。')).default({}),
   /** 明細ごとの実際の数量・取引先（明細の key → 文字）。予算と違うことがある */
   itemQuantities: z.record(z.string(), z.string().trim().max(100)).default({}),
   itemVendors: z.record(z.string(), z.string().trim().max(100)).default({}),
@@ -33,7 +33,7 @@ const items = {
  * 送られてきた項目だけ書き換える。
  */
 export const itemsUpdateSchema = z.object({
-  amounts: z.record(z.string(), z.number().int('執行額は整数で入力してください').nullable()).default({}),
+  amounts: z.record(z.string(), z.number().int('執行額は整数で入力してください。').nullable()).default({}),
   quantities: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
   vendors: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
 })
@@ -41,9 +41,9 @@ export const itemsUpdateSchema = z.object({
 function checkItems(v: { budgetLineKeys: string[], itemNumber: string, quantity?: string }, ctx: z.RefinementCtx) {
   // 予算から選んだときの数量は明細ごとに入力する（予算の表に数量がある明細だけ必須。サーバーで確認する）
   if (v.budgetLineKeys.length) return
-  if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください', path: ['quantity'] })
-  if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '執行項目を予算から選んでください', path: ['budgetLineKeys'] })
-  else if (!ITEM_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '項目番号は out-03-02-06 の形式で入力してください', path: ['itemNumber'] })
+  if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください。', path: ['quantity'] })
+  if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '執行項目を予算から選んでください。', path: ['budgetLineKeys'] })
+  else if (!ITEM_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '項目番号は out-03-02-06 の形式で入力してください。', path: ['itemNumber'] })
 }
 
 const base = z.object({
@@ -61,9 +61,9 @@ export const bankAccountSchema = z.object({
   bankName: required('金融機関名'),
   branchName: required('支店名'),
   accountType: required('振込先の口座種別'), // 普通 / 当座 / その他（自由記述）
-  accountNumber: z.string().regex(/^\d{1,8}$/, '口座番号は数字で入力してください'),
+  accountNumber: z.string().regex(/^\d{1,8}$/, '口座番号は数字で入力してください。'),
   accountName: required('口座名義'),
-}, { error: '振込先の口座情報を入力してください' })
+}, { error: '振込先の口座情報を入力してください。' })
 
 export const executionRequestSchema = z.discriminatedUnion('type', [
   base.extend({
@@ -84,7 +84,7 @@ export const executionRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('立替'),
     amount: yen,
     purchase: required('購入先'),
-    paperReceipt: z.enum(PAPER_RECEIPT, { error: '紙媒体の領収証の有無を選んでください' }),
+    paperReceipt: z.enum(PAPER_RECEIPT, { error: '紙媒体の領収証の有無を選んでください。' }),
     deadline: date, // 立替予定日
   }),
   base.extend({
@@ -98,7 +98,7 @@ export const executionRequestSchema = z.discriminatedUnion('type', [
 ]).superRefine((v, ctx) => {
   checkItems(v, ctx)
   if (v.type === 'その他' && !v.otherMethod) {
-    ctx.addIssue({ code: 'custom', message: '執行形態（その他）の内容を入力してください', path: ['otherMethod'] })
+    ctx.addIssue({ code: 'custom', message: '執行形態（その他）の内容を入力してください。', path: ['otherMethod'] })
   }
 })
 export type ExecutionRequestInput = z.input<typeof executionRequestSchema>
@@ -131,10 +131,10 @@ export const notificationSettingsSchema = z.object({
   dmOnCreated: z.boolean(),
   dmOnExecuted: z.boolean(),
   /** Slack に登録しているメール（ECC のメールでも入力してもらう。DM を受け取るなら必須） */
-  slackEmail: z.union([z.literal(''), z.string().trim().toLowerCase().pipe(z.email('Slack のメールアドレスの形式で入力してください'))]).default(''),
+  slackEmail: z.union([z.literal(''), z.string().trim().toLowerCase().pipe(z.email('Slack のメールアドレスの形式で入力してください。'))]).default(''),
 }).superRefine((v, ctx) => {
   if ((v.dmOnCreated || v.dmOnExecuted) && !v.slackEmail) {
-    ctx.addIssue({ code: 'custom', message: 'Slack に登録しているメールアドレスを入力してください', path: ['slackEmail'] })
+    ctx.addIssue({ code: 'custom', message: 'Slack に登録しているメールアドレスを入力してください。', path: ['slackEmail'] })
   }
 })
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>

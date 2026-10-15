@@ -229,7 +229,7 @@ async function onSubmit() {
         <p class="section-desc">ZAIが五月祭常任委員会の各種アカウントで発注を行います。</p>
         <RadioWithOther v-model="form.site" label="通販サイト" :options="ONLINE_SITES" other required />
         <label><span>商品ページのリンク<span class="req">*</span></span>
-          <textarea v-model="form.url" rows="3" placeholder="複数ある場合は改行して入力してください" required />
+          <textarea v-model="form.url" rows="3" placeholder="複数ある場合は改行して入力してください。" required />
         </label>
         <ItemDetailsInputs
           v-if="hasItems"

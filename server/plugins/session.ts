@@ -10,7 +10,7 @@ export default defineNitroPlugin(() => {
     const user = await useDb().query.users.findFirst({ where: eq(schema.users.email, session.user.email) })
     if (!user) {
       await clearUserSession(event)
-      throw createError({ statusCode: 401, message: 'もう一度ログインしてください' })
+      throw createError({ statusCode: 401, message: 'もう一度ログインしてください。' })
     }
     const current = { email: user.email, name: user.name, role: user.role }
     session.user = current

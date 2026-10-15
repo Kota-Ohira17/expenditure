@@ -61,5 +61,5 @@ async function shrinkImage(file: File): Promise<File> {
 export function toMessages(error: unknown): string[] {
   const data = (error as { data?: { data?: unknown, message?: string } }).data
   if (Array.isArray(data?.data)) return data.data as string[]
-  return [data?.message ?? '送信に失敗しました']
+  return [data?.message ?? '送信に失敗しました。']
 }

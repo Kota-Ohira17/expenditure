@@ -30,7 +30,7 @@ async function save(email: string) {
   try {
     await $fetch<unknown>(`/api/users/${encodeURIComponent(email)}`, { method: 'PATCH', body: { role } })
     await refresh()
-    messages[email] = { ok: true, text: '保存しました' }
+    messages[email] = { ok: true, text: '保存しました。' }
   }
   catch (error) {
     messages[email] = { ok: false, text: toMessages(error).join(' / ') }
@@ -64,7 +64,7 @@ async function add() {
   added.value = ''
   try {
     await $fetch<unknown>('/api/users', { method: 'POST', body: newUser })
-    added.value = `${newUser.email} を${ROLE_LABELS[newUser.role]}として登録しました`
+    added.value = `${newUser.email} を${ROLE_LABELS[newUser.role]}として登録しました。`
     Object.assign(newUser, { email: '', name: '', role: 'member' })
     await refresh()
   }
@@ -99,7 +99,7 @@ const formatDate = (d: string | Date | null) => (d ? new Date(d).toLocaleString(
       <h2>委員を追加</h2>
       <div class="add-fields">
         <label>メールアドレス<input v-model.trim="newUser.email" type="email" placeholder="xxxx@g.ecc.u-tokyo.ac.jp" required></label>
-        <label>氏名（任意）<input v-model.trim="newUser.name" placeholder="初回ログイン時に更新されます"></label>
+        <label>氏名（任意）<input v-model.trim="newUser.name" placeholder="初回ログイン時に更新されます。"></label>
         <label>権限
           <select v-model="newUser.role">
             <option v-for="r in ROLES" :key="r" :value="r">{{ ROLE_LABELS[r] }}</option>

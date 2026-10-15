@@ -2,8 +2,8 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 
 const bodySchema = z.object({
-  email: z.string().trim().toLowerCase().pipe(z.email('メールアドレスの形式で入力してください')),
-  name: z.string().trim().min(1, '氏名を入力してください'),
+  email: z.string().trim().toLowerCase().pipe(z.email('メールアドレスの形式で入力してください。')),
+  name: z.string().trim().min(1, '氏名を入力してください。'),
   code: z.string().default(''),
 })
 
@@ -28,13 +28,13 @@ export default defineEventHandler(async (event) => {
 
   if (testLogin) {
     if (!isAllowedEmail(email)) {
-      throw createError({ statusCode: 400, message: `@${useRuntimeConfig().allowedEmailDomain} のメールアドレスで入ってください` })
+      throw createError({ statusCode: 400, message: `@${useRuntimeConfig().allowedEmailDomain} のメールアドレスで入ってください。` })
     }
     const expected = isBootstrapAdmin(email) ? testAdminCode : testLoginCode
     // 合言葉が未設定のまま公開されても、誰も入れないようにする
     if (!expected || !sameCode(code, expected)) {
       await new Promise(r => setTimeout(r, 1000)) // 総当たりを遅らせる
-      throw createError({ statusCode: 401, message: '合言葉が違います' })
+      throw createError({ statusCode: 401, message: '合言葉が違います。' })
     }
   }
 

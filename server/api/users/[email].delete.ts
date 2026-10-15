@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 export default defineEventHandler(async (event) => {
   const me = await requirePermission(event, 'manageUsers')
   const email = decodeURIComponent(getRouterParam(event, 'email') ?? '').toLowerCase()
-  if (email === me.email) throw createError({ statusCode: 400, message: '自分自身は削除できません' })
+  if (email === me.email) throw createError({ statusCode: 400, message: '自分自身は削除できません。' })
 
   const target = await findUserOr404(email)
   await assertCanRemoveManager(target)

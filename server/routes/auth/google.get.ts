@@ -5,7 +5,7 @@ export default defineOAuthGoogleEventHandler({
   },
   async onSuccess(event, { user }) {
     if (!user.email_verified || !isAllowedEmail(user.email)) {
-      throw createError({ statusCode: 403, message: '許可されたドメインのアカウントでログインしてください' })
+      throw createError({ statusCode: 403, message: '許可されたドメインのアカウントでログインしてください。' })
     }
     await loginAs(event, user.email, user.name ?? user.email)
     return sendRedirect(event, '/')
