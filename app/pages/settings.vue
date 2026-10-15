@@ -41,9 +41,8 @@ async function onSave() {
         <label class="check"><input v-model="form.dmOnExecuted" type="checkbox"> 申請が対応済みになったとき</label>
       </fieldset>
 
-      <label>Slack に登録しているメールアドレス
-        <span class="hint">ECC のメール（{{ data?.email }}）と違うときだけ入力してください。空欄なら ECC のメールで Slack のアカウントを探します。</span>
-        <input v-model.trim="form.slackEmail" type="email" placeholder="例：taro@example.com" autocomplete="email">
+      <label>Slack に登録しているメールアドレスを入力してください<span v-if="form.dmOnCreated || form.dmOnExecuted" class="req">*</span>
+        <input v-model.trim="form.slackEmail" type="email" placeholder="例：xxxx@g.ecc.u-tokyo.ac.jp" autocomplete="email" :required="form.dmOnCreated || form.dmOnExecuted">
       </label>
 
       <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>

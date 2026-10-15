@@ -124,7 +124,7 @@ export const users = sqliteTable('users', {
   /** Slack の DM を受け取るか（自分の申請を受け付けたとき / 対応済みになったとき）。本人が通知設定で変える */
   dmOnCreated: integer('dm_on_created', { mode: 'boolean' }).notNull().default(true),
   dmOnExecuted: integer('dm_on_executed', { mode: 'boolean' }).notNull().default(true),
-  /** Slack に登録しているメール（ECC のメールと違う人だけ）。空なら ECC のメールで Slack のユーザーを探す */
+  /** Slack に登録しているメール（本人が通知設定で入力する）。未入力の人は ECC のメールで Slack のユーザーを探す */
   slackEmail: text('slack_email').notNull().default(''),
 })
 

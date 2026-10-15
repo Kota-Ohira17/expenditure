@@ -134,6 +134,8 @@ button.link { background: none; color: var(--text); padding: 0; border: none; te
 button.link:hover:not(:disabled) { background: none; }
 
 .hint { color: var(--muted); font-size: .85rem; margin: 0; }
+/* 必須の印（＊） */
+.req { color: var(--danger); margin-left: .15rem; }
 .error { color: var(--danger); margin: 0; }
 .success { padding: 1rem; border: 1px solid var(--done); border-radius: 6px; }
 .empty { color: var(--muted); }

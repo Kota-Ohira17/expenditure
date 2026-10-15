@@ -130,7 +130,11 @@ export const executeSchema = z.object({
 export const notificationSettingsSchema = z.object({
   dmOnCreated: z.boolean(),
   dmOnExecuted: z.boolean(),
-  /** Slack に登録しているメール（ECC のメールと同じなら空） */
+  /** Slack に登録しているメール（ECC のメールでも入力してもらう。DM を受け取るなら必須） */
   slackEmail: z.union([z.literal(''), z.string().trim().toLowerCase().pipe(z.email('Slack のメールアドレスの形式で入力してください'))]).default(''),
+}).superRefine((v, ctx) => {
+  if ((v.dmOnCreated || v.dmOnExecuted) && !v.slackEmail) {
+    ctx.addIssue({ code: 'custom', message: 'Slack に登録しているメールアドレスを入力してください', path: ['slackEmail'] })
+  }
 })
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>
