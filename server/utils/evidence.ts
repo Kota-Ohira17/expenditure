@@ -17,7 +17,7 @@ export function canDeleteEvidence(user: SessionUser, file: { uploadedBy: string 
 
 /**
  * 証憑のファイル名（拡張子なし）。「項目番号_担当名_支出項目名_月日（4桁）」。
- * 月日は証憑の日付（立替日など）、なければ提出した日。同じ申請の2枚目からは末尾に _2, _3。
+ * 月日は証憑の日付（立替日・執行日）、なければ提出した日。同じ申請の2枚目からは末尾に _2, _3。
  * 例: out01-04-01~03_資材計画部長_レンタカー代_1017
  */
 export function evidenceLabel(entry: Pick<Entry, 'itemNumber' | 'inCharge' | 'itemName'>, date: string, nth: number) {
@@ -33,10 +33,13 @@ export function evidenceLabel(entry: Pick<Entry, 'itemNumber' | 'inCharge' | 'it
 /** 「2026-10-17」→「1017」 */
 const monthDayOf = (date: string) => date.slice(5, 7) + date.slice(8, 10)
 
-/** 今日の日付（日本時間、YYYY-MM-DD） */
-export function todayInJapan() {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date())
+/** 日付を日本時間の YYYY-MM-DD にする */
+export function dateInJapan(d: Date) {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(d)
 }
+
+/** 今日の日付（日本時間、YYYY-MM-DD） */
+export const todayInJapan = () => dateInJapan(new Date())
 
 /** 申請ごとの証憑の一覧（ファイル名つき、付けた順） */
 export async function evidencesOf(entryIds: number[]) {
