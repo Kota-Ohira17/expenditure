@@ -1,6 +1,7 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import { buildSheetRows, SHEET_COLUMN_LABELS, SHEET_COLUMNS, type Level } from '../../shared/budgetRows'
 import type { BudgetLine, Entry, EntryItem } from '../db/schema'
+import type { EvidenceView } from './evidence'
 
 /**
  * 決算シートの中身。Excel（/api/settlement.xlsx）とGoogleスプレッドシート（/api/settlement/sheets）の
@@ -46,21 +47,41 @@ const LEVEL_FILL: Partial<Record<Level, string>> = {
 /** 列見出しの行の色（シートと同じグレー） */
 export const HEADER_FILL = 'D9D9D9'
 
-type DoneEntry = Entry & { items: EntryItem[] }
+type DoneEntry = Entry & { items: EntryItem[], evidences: EvidenceView[], attachmentName: string | null }
+type Link = { text: string, url: string }
 
-/** 証憑（請求書・領収書など）へのリンク。添付がなければ null */
-function evidenceLink(e: DoneEntry, origin: string): { text: string, url: string } | null {
-  if (!e.attachmentId) return null
-  const kind = e.kind === 'evidence' ? String(e.details.kindOfEvidence ?? '証憑') : '請求書'
-  return { text: `${e.seq} ${kind}`, url: `${origin}/api/entries/${e.id}/attachment` }
+/**
+ * 申請の証憑へのリンク（ファイル名を表示）。
+ * - 執行依頼：台帳から付けた証憑。まだなければ請求書（振込で添付されたもの）
+ * - 以前の証憑提出フォームの申請：その添付
+ */
+function evidenceLinks(e: DoneEntry, origin: string): Link[] {
+  if (e.kind === 'execution' && e.evidences.length) {
+    return e.evidences.map(f => ({ text: f.fileName, url: `${origin}/api/entries/${e.id}/evidences/${f.id}` }))
+  }
+  if (e.attachmentId) return [{ text: e.attachmentName ?? `${e.seq} 添付`, url: `${origin}/api/entries/${e.id}/attachment` }]
+  return []
+}
+
+/** 1つのセルに入れる証憑：1件ならリンク、複数なら最初のファイルへのリンクに「ほかN件」を添える */
+function evidenceCellOf(links: Link[]): CellValue {
+  if (!links.length) return null
+  if (links.length === 1) return links[0]!
+  return { text: `${links[0]!.text} ほか${links.length - 1}件`, url: links[0]!.url }
 }
 
 export async function buildSettlementTables(origin: string): Promise<Table[]> {
   const db = useDb()
   const lines = await db.select().from(schema.budgetLines).orderBy(asc(schema.budgetLines.sortOrder))
-  const done: DoneEntry[] = await withItems(
+  const rows = await withEvidences(await withItems(
     await db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).orderBy(asc(schema.entries.createdAt)),
-  )
+  ))
+  // 請求書・以前の証憑提出の添付のファイル名
+  const attachmentIds = rows.map(r => r.attachmentId).filter((id): id is number => id != null)
+  const names = new Map(attachmentIds.length
+    ? (await db.select({ id: schema.attachments.id, fileName: schema.attachments.fileName }).from(schema.attachments).where(inArray(schema.attachments.id, attachmentIds))).map(a => [a.id, a.fileName])
+    : [])
+  const done: DoneEntry[] = rows.map(r => ({ ...r, attachmentName: r.attachmentId ? names.get(r.attachmentId) ?? null : null }))
   return [settlementTable(lines, done, origin), executionTable(done, origin)]
 }
 
@@ -78,11 +99,10 @@ function settlementTable(lines: BudgetLine[], done: DoneEntry[], origin: string)
     }
   }
 
-  /** 証憑の列: 1件ならリンク、複数なら申請番号を並べて執行一覧を見てもらう */
+  /** 証憑の列: 1件ならリンク、複数ならファイル名を並べて執行一覧を見てもらう */
   const evidenceCell = (entries: DoneEntry[]): CellValue => {
-    const links = entries.map(e => evidenceLink(e, origin)).filter(l => l != null)
-    if (!links.length) return null
-    if (links.length === 1) return links[0]!
+    const links = entries.flatMap(e => evidenceLinks(e, origin))
+    if (links.length <= 1) return evidenceCellOf(links)
     return `${links.map(l => l.text).join('、')}（執行一覧にリンク）`
   }
 
@@ -165,7 +185,7 @@ function settlementTable(lines: BudgetLine[], done: DoneEntry[], origin: string)
     rows.push({ values: {} })
     rows.push({ values: { number: '予算にない項目' }, bold: true })
     for (const e of outsideBudget) {
-      rows.push({ values: { number: e.itemNumber, kou: e.itemName, actual: e.amount, count: 1, seqs: e.seq, evidence: evidenceLink(e, origin) } })
+      rows.push({ values: { number: e.itemNumber, kou: e.itemName, actual: e.amount, count: 1, seqs: e.seq, evidence: evidenceCellOf(evidenceLinks(e, origin)) } })
     }
   }
 
@@ -206,7 +226,7 @@ function executionTable(done: DoneEntry[], origin: string): Table {
     { key: 'budget', header: '予算額', width: 12, format: 'yen' },
     { key: 'actual', header: '執行額', width: 12, format: 'yen' },
     { key: 'entryAmount', header: '申請の金額', width: 12, format: 'yen' },
-    { key: 'evidence', header: '証憑', width: 18 },
+    { key: 'evidence', header: '証憑', width: 40 },
     { key: 'remark', header: '備考', width: 30 },
   ]
   const rows: TableRow[] = []
@@ -222,7 +242,7 @@ function executionTable(done: DoneEntry[], origin: string): Table {
       applicantName: e.applicantName,
       itemName: e.itemName,
       entryAmount: e.amount,
-      evidence: evidenceLink(e, origin),
+      evidence: evidenceCellOf(evidenceLinks(e, origin)),
       remark: e.remark,
     }
     if (!e.items.length) {

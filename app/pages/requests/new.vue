@@ -251,8 +251,8 @@ async function onSubmit() {
         <legend>立替</legend>
         <p class="section-desc">
           委員が一度私費で支払いを行い、後日ZAIが精算を行います。<br>
-          領収書といった証憑は必ず<NuxtLink to="/evidences/new">証憑提出</NuxtLink>から提出してください。<br>
-          清算の日程については購入後領収書等とともに証憑提出で希望を入力してください。
+          領収書といった証憑は、購入後に<NuxtLink to="/entries">台帳</NuxtLink>でこの申請を開いて提出してください。<br>
+          清算の時期の希望も、証憑を提出するときに選んでください。
         </p>
         <label><span>購入先<span class="req">*</span></span><input v-model="form.purchase" required></label>
         <ItemDetailsInputs
@@ -274,7 +274,7 @@ async function onSubmit() {
           label="紙媒体の領収証の有無"
           :options="PAPER_RECEIPT"
           required
-          hint="ある場合、購入後すぐに証憑提出から提出してください。また、清算の際に忘れずに持参してください。"
+          hint="ある場合、購入後すぐに台帳から証憑として提出してください。また、清算の際に忘れずに持参してください。"
         />
         <label><span>立替予定日<span class="req">*</span></span><input v-model="form.payPlanDate" type="date" required></label>
         <label>備考<textarea v-model="form.remark" rows="3" /></label>

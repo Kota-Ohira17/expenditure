@@ -41,7 +41,7 @@ async function onSave() {
         <label class="check"><input v-model="form.dmOnExecuted" type="checkbox"> 申請が対応済みになったとき</label>
       </fieldset>
 
-      <label>Slack に登録しているメールアドレスを入力してください。<span v-if="form.dmOnCreated || form.dmOnExecuted" class="req">*</span>
+      <label><span>Slack に登録しているメールアドレスを入力してください。<span v-if="form.dmOnCreated || form.dmOnExecuted" class="req">*</span></span>
         <input v-model.trim="form.slackEmail" type="email" placeholder="例：xxxx@g.ecc.u-tokyo.ac.jp" autocomplete="email" :required="form.dmOnCreated || form.dmOnExecuted">
       </label>
 

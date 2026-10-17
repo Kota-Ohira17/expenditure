@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PAPER_RECEIPT, TRANSFER_BANKS } from './constants'
+import { EVIDENCE_KINDS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
 
 const required = (label: string) => {
   const message = `${label}を入力してください。`
@@ -103,19 +103,17 @@ export const executionRequestSchema = z.discriminatedUnion('type', [
 })
 export type ExecutionRequestInput = z.input<typeof executionRequestSchema>
 
-export const evidenceSchema = z.object({
-  advancedName: required('立替者氏名'),
-  department: bureau,
-  inCharge: required('担当名'),
-  ...items,
-  itemName: required('支出項目名（内訳）'),
-  quantity: z.string().trim().default(''), // 予算にない項目のときは必須（checkItems）
-  kindOfEvidence: z.enum(['領収書', 'レシート', '見積書', 'その他']),
-  payDate: date,
-  amount: yen,
-  refundTiming: z.enum(['委員返金と同時', 'できる限り早く']),
-}).superRefine(checkItems)
-export type EvidenceInput = z.input<typeof evidenceSchema>
+/**
+ * 台帳から証憑を付けるときの入力（ファイルは別に送る）。
+ * 金額・日付は分かれば入れる。返金時期は立替のときだけ。
+ */
+export const evidenceUploadSchema = z.object({
+  kind: z.enum(EVIDENCE_KINDS, { error: '証憑の種類を選んでください。' }),
+  amount: z.union([z.literal(''), yen]).default(''),
+  date: z.union([z.literal(''), date]).default(''),
+  refundTiming: z.union([z.literal(''), z.enum(REFUND_TIMINGS)]).default(''),
+})
+export type EvidenceUploadInput = z.input<typeof evidenceUploadSchema>
 
 export const executeSchema = z.object({
   done: z.boolean(),

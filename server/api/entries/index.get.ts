@@ -1,4 +1,4 @@
-import { and, asc, eq, not, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, sql, type SQL } from 'drizzle-orm'
 import { PAYMENT_TYPES, VIEWS, type ViewKey } from '../../../shared/constants'
 import { can } from '../../../shared/roles'
 
@@ -20,9 +20,14 @@ export default defineEventHandler(async (event) => {
   let orderBy: SQL[]
 
   if (view === 'number' || view === 'deadline') {
-    // 立替の執行依頼は台帳に載せず、証憑提出の時点で載せる（旧GASと同じ）
-    conds.push(not(and(eq(e.kind, 'execution'), eq(e.type, '立替'))!))
+    // 立替も執行依頼の時点で台帳に載せる（証憑は台帳から付ける）
     orderBy = view === 'number' ? [asc(e.itemNumber), asc(e.createdAt)] : byDeadline
+  }
+  else if (view === 'noEvidence') {
+    // 証憑がまだ付いていない執行依頼（以前の証憑提出フォームの申請は除く）
+    conds.push(eq(e.kind, 'execution'))
+    conds.push(sql`not exists (select 1 from ${schema.evidenceFiles} where ${schema.evidenceFiles.entryId} = ${e.id})`)
+    orderBy = byDeadline
   }
   else if (view === 'pending') {
     conds.push(eq(e.status, 'pending'))
@@ -39,5 +44,5 @@ export default defineEventHandler(async (event) => {
     .where(and(...conds))
     .orderBy(...orderBy)
 
-  return (await withItems(rows)).map(r => toPublicEntry(r, can(user.role, 'viewBankAccount')))
+  return (await withEvidences(await withItems(rows))).map(r => toPublicEntry(r, can(user.role, 'viewBankAccount')))
 })

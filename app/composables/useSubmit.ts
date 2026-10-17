@@ -14,7 +14,7 @@ export function useSubmit<T>(url: string) {
       if (file) {
         const prepared = await shrinkImage(file)
         if (prepared.size > MAX_ATTACHMENT_BYTES) {
-          errors.value = ['添付ファイルは4MB以下にしてください（PDFは圧縮するか、ページを分けてください）']
+          errors.value = ['添付ファイルは4MB以下にしてください（PDFは圧縮するか、ページを分けてください）。']
           return
         }
         form.append('attachment', prepared, prepared.name)

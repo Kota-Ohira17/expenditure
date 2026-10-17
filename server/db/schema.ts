@@ -111,6 +111,25 @@ export type BudgetLine = typeof budgetLines.$inferSelect
 export type EntryItem = typeof entryItems.$inferSelect
 
 /**
+ * 申請に付けた証憑（領収書・レシートなど）。台帳から、申請者本人か財務局長・管理者が付ける。
+ * 1つの申請に複数付けられる（立替で領収書が何枚もある場合など）。
+ */
+export const evidenceFiles = sqliteTable('evidence_files', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  entryId: integer('entry_id').notNull().references(() => entries.id),
+  attachmentId: integer('attachment_id').notNull().references(() => attachments.id),
+  /** 領収書 / レシート / 見積書 / その他 */
+  kind: text('kind').notNull(),
+  /** 証憑の金額・日付（立替なら立替金額・立替日）。分からなければ null */
+  amount: integer('amount'),
+  date: text('date'),
+  uploadedBy: text('uploaded_by').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type EvidenceFile = typeof evidenceFiles.$inferSelect
+
+/**
  * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。
  * 環境変数 NUXT_ADMIN_EMAILS のユーザーはログインのたびに管理者に戻る（最初の管理者を作るため）。
  */
