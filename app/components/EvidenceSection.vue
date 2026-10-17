@@ -75,7 +75,7 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
 
     <form v-if="canSubmit" class="upload" @submit.prevent="onUpload">
       <span class="block-label">証憑を提出する</span>
-      <p class="hint">ファイルはPDF・画像のどちらかで、4MBまでにしてください。立替以外の場合、執行日にはZAIが執行した日付が入力されています。</p>
+      <p class="hint">ファイルはPDF・画像のどちらかで、4MBまでにしてください。<br>立替以外の場合、執行日にはZAIが執行した日付が入力されています。</p>
       <div class="fields">
         <label>種類
           <select v-model="form.kind" class="fit"><option v-for="k in EVIDENCE_KINDS" :key="k">{{ k }}</option></select>
