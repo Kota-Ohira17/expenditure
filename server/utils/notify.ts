@@ -39,21 +39,23 @@ async function dmFor(event: NotifyEvent, entry: Entry) {
  *   本人が通知設定で受け取らないようにしていれば null（n8n 側は DM を送らない）
  */
 export async function notifyN8n(event: NotifyEvent, entry: Entry) {
-  const { n8nWebhookUrl, n8nWebhookSecret } = useRuntimeConfig()
-  if (!n8nWebhookUrl) return
   try {
-    await $fetch(n8nWebhookUrl, {
-      method: 'POST',
-      headers: n8nWebhookSecret ? { 'X-Webhook-Secret': n8nWebhookSecret } : {},
-      body: {
-        event,
-        entry: toNotification(entry),
-        dm: await dmFor(event, entry),
-      },
-      timeout: 10_000,
-    })
+    await postToN8n({ event, entry: toNotification(entry), dm: await dmFor(event, entry) })
   }
   catch (error) {
     console.error('[notifyN8n] 通知に失敗しました', entry.seq, error)
   }
+}
+
+/** n8n の Webhook に送る（未設定なら何もしない）。送れなかったときは例外を投げる */
+export async function postToN8n(body: Record<string, unknown>) {
+  const { n8nWebhookUrl, n8nWebhookSecret } = useRuntimeConfig()
+  if (!n8nWebhookUrl) return false
+  await $fetch(n8nWebhookUrl, {
+    method: 'POST',
+    headers: n8nWebhookSecret ? { 'X-Webhook-Secret': n8nWebhookSecret } : {},
+    body,
+    timeout: 10_000,
+  })
+  return true
 }
