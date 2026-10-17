@@ -70,7 +70,7 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
 
     <form v-if="canSubmit" class="upload" @submit.prevent="onUpload">
       <span class="block-label">証憑を提出する</span>
-      <p class="hint">ファイル名は「受付番号_項目番号_支出項目名_種類_金額」に自動で付け直します。PDF・画像、4MBまで。</p>
+      <p class="hint">ファイル名は「項目番号_担当名_支出項目名_月日」に自動で付け直します（月日は日付の欄、空なら今日）。PDF・画像、4MBまで。</p>
       <div class="fields">
         <label>種類
           <select v-model="form.kind" class="fit"><option v-for="k in EVIDENCE_KINDS" :key="k">{{ k }}</option></select>
