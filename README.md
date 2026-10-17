@@ -140,6 +140,21 @@ n8n のワークフローには、チャンネル投稿とは別に次の2ステ
 
 メールで Slack のユーザーが見つからないこともあるので、そのノードは「On Error: Continue」にして、DM が送れなくてもチャンネル投稿は止まらないようにしてください。
 
+### 期限切れのリマインド
+`/api/cron/overdue-reminder` を1日1回呼ぶと、期限を過ぎても未対応の執行依頼を n8n の Webhook に送ります（1件もなければ送りません）。
+
+```json
+{ "event": "overdue", "text": "期限を過ぎた未対応の申請が1件あります。\n・E-024 …（振込／期限 2026-10-15・2日超過／…）\n台帳（未対応）: https://…/entries?view=pending", "overdue": [ … ], "url": "…" }
+```
+
+n8n では `event` が `overdue` のとき、`text` をそのまま Slack のチャンネルに投稿してください。
+
+呼び出し方は次のどちらかです。合言葉が設定されていないと使えません。
+- **n8n のスケジュール**：Schedule Trigger（毎朝9時など）→ HTTP Request で `GET https://<ドメイン>/api/cron/overdue-reminder`、ヘッダー `X-Cron-Secret: <NUXT_CRON_SECRET の値>`
+- **Vercel の Cron**：`vercel.json` に毎日 9:00（日本時間）で設定済み。Vercel の環境変数 `CRON_SECRET` を設定すると有効になる
+
+`?dryRun=1` を付けると、Slack には送らず送る予定の内容だけを返します（設定の確認用）。
+
 ### 添付ファイルについて
 Vercel の関数は 4.5MB までしかリクエストを受け取れないため、添付は **4MB まで**。
 スマホ写真は送信前にブラウザで長辺 2000px の JPEG に縮小しています（`app/composables/useSubmit.ts`）。
