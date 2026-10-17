@@ -20,15 +20,17 @@ export default defineEventHandler(async (event) => {
   if (!canSubmitEvidence(user, entry)) throw createError({ statusCode: 403, message: '証憑を付けられるのは申請者本人と財務局長・管理者です。' })
 
   const amount = input.amount === '' ? null : input.amount
+  // 日付が空なら、立替以外は執行日（ZAI が執行済み）、それもなければ今日
+  const date = input.date || (entry.type !== '立替' && entry.executedAt ? dateInJapan(entry.executedAt) : '')
   const [row] = await db.select({ n: count() }).from(schema.evidenceFiles).where(eq(schema.evidenceFiles.entryId, id))
-  const attachmentId = await saveAttachment(file, evidenceLabel(entry, input.date || todayInJapan(), (row?.n ?? 0) + 1))
+  const attachmentId = await saveAttachment(file, evidenceLabel(entry, date || todayInJapan(), (row?.n ?? 0) + 1))
 
   await db.insert(schema.evidenceFiles).values({
     entryId: id,
     attachmentId,
     kind: input.kind,
     amount,
-    date: input.date || null,
+    date: date || null,
     uploadedBy: user.email,
     createdAt: new Date(),
   })

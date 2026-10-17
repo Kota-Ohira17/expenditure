@@ -7,7 +7,7 @@ import { EVIDENCE_KINDS, REFUND_TIMINGS } from '#shared/constants'
 
 type Evidence = { id: number, kind: string, amount: number | null, date: string | null, uploadedBy: string, fileName: string }
 const props = defineProps<{
-  entry: { id: number, type: string, kind: string, amount: number | null, applicantEmail: string, details: unknown, evidences: Evidence[] }
+  entry: { id: number, type: string, kind: string, amount: number | null, applicantEmail: string, details: unknown, executedAt: string | Date | null, evidences: Evidence[] }
 }>()
 const emit = defineEmits<{ changed: [] }>()
 
@@ -18,7 +18,12 @@ const isAdvance = computed(() => props.entry.type === '立替')
 const refundTiming = computed(() => String((props.entry.details as { refundTiming?: string } | null)?.refundTiming ?? ''))
 
 const { submit, errors, pending } = useSubmit(`/api/entries/${props.entry.id}/evidences`)
-const form = reactive({ kind: '領収書', amount: '', date: '', refundTiming: refundTiming.value || '委員返金と同時' })
+/** 立替以外は ZAI が執行済みのはずなので、執行日を日付の初期値にする（日本時間の YYYY-MM-DD） */
+const executedDate = computed(() => (props.entry.executedAt
+  ? new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date(props.entry.executedAt))
+  : ''))
+const defaultDate = () => (isAdvance.value ? '' : executedDate.value)
+const form = reactive({ kind: '領収書', amount: '', date: defaultDate(), refundTiming: refundTiming.value || '委員返金と同時' })
 const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const done = ref(false)
@@ -35,7 +40,7 @@ async function onUpload() {
   file.value = null
   if (fileInput.value) fileInput.value.value = ''
   form.amount = ''
-  form.date = ''
+  form.date = defaultDate()
   done.value = true
   emit('changed')
 }
@@ -70,13 +75,13 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
 
     <form v-if="canSubmit" class="upload" @submit.prevent="onUpload">
       <span class="block-label">証憑を提出する</span>
-      <p class="hint">ファイル名は「項目番号_担当名_支出項目名_月日」に自動で付け直します（月日は日付の欄、空なら今日）。PDF・画像、4MBまで。</p>
+      <p class="hint">ファイルはPDF・画像のどちらかで、4MBまでにしてください。立替以外の場合、執行日にはZAIが執行した日付が入力されています。</p>
       <div class="fields">
         <label>種類
           <select v-model="form.kind" class="fit"><option v-for="k in EVIDENCE_KINDS" :key="k">{{ k }}</option></select>
         </label>
         <label>金額（円）<YenInput v-model="form.amount" placeholder="例：1000" /></label>
-        <label>{{ isAdvance ? '立替日' : '日付' }}<input v-model="form.date" type="date"></label>
+        <label>{{ isAdvance ? '立替日' : '執行日' }}<input v-model="form.date" type="date"></label>
         <label v-if="isAdvance">返金時期
           <select v-model="form.refundTiming" class="fit"><option v-for="t in REFUND_TIMINGS" :key="t">{{ t }}</option></select>
         </label>
