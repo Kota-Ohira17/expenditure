@@ -112,7 +112,8 @@ input, select, textarea {
   font: inherit; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface); color: var(--text); width: 100%;
 }
-input[type="checkbox"] { width: auto; }
+/* チェックボックス・ラジオボタンは横いっぱいに広げない（広げると横の文字が押しつぶされて縦に並んでしまう） */
+input[type="checkbox"], input[type="radio"] { width: auto; }
 /* フォームの入力欄は、入れる内容に合った長さにする（横いっぱいに広げすぎない） */
 form :where(input:not([type="checkbox"]):not([type="radio"]), select) { max-width: 36rem; }
 form textarea { max-width: 48rem; }
