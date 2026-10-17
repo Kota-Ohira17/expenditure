@@ -16,18 +16,26 @@ export function canDeleteEvidence(user: SessionUser, file: { uploadedBy: string 
 }
 
 /**
- * 証憑のファイル名（拡張子なし）。受付番号を先頭にして、保存したときに番号順に並ぶようにする。
- * 例: E-012_out01-04-01~03_レンタカー代_領収書_14900円（同じ申請の2枚目からは末尾に _2, _3）
+ * 証憑のファイル名（拡張子なし）。「項目番号_担当名_支出項目名_月日（4桁）」。
+ * 月日は証憑の日付（立替日など）、なければ提出した日。同じ申請の2枚目からは末尾に _2, _3。
+ * 例: out01-04-01~03_資材計画部長_レンタカー代_1017
  */
-export function evidenceLabel(entry: Pick<Entry, 'seq' | 'itemNumber' | 'itemName'>, kind: string, amount: number | null, nth: number) {
+export function evidenceLabel(entry: Pick<Entry, 'itemNumber' | 'inCharge' | 'itemName'>, date: string, nth: number) {
   return [
-    entry.seq,
     shortenItemNumbers(entry.itemNumber),
+    entry.inCharge,
     entry.itemName,
-    kind,
-    amount != null ? `${amount}円` : '',
+    monthDayOf(date),
     nth > 1 ? String(nth) : '',
   ].filter(Boolean).join('_')
+}
+
+/** 「2026-10-17」→「1017」 */
+const monthDayOf = (date: string) => date.slice(5, 7) + date.slice(8, 10)
+
+/** 今日の日付（日本時間、YYYY-MM-DD） */
+export function todayInJapan() {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date())
 }
 
 /** 申請ごとの証憑の一覧（ファイル名つき、付けた順） */

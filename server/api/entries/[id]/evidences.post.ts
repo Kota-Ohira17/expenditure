@@ -3,7 +3,7 @@ import { evidenceUploadSchema } from '../../../../shared/schemas'
 
 /**
  * 台帳から申請に証憑を付ける（申請者本人か、財務局長・管理者）。
- * ファイル名は「受付番号_項目番号_支出項目名_種類_金額」に自動で付け直す。
+ * ファイル名は「項目番号_担当名_支出項目名_月日（4桁）」に自動で付け直す。
  * 立替なら返金時期も申請に記録する。
  */
 export default defineEventHandler(async (event) => {
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
 
   const amount = input.amount === '' ? null : input.amount
   const [row] = await db.select({ n: count() }).from(schema.evidenceFiles).where(eq(schema.evidenceFiles.entryId, id))
-  const attachmentId = await saveAttachment(file, evidenceLabel(entry, input.kind, amount, (row?.n ?? 0) + 1))
+  const attachmentId = await saveAttachment(file, evidenceLabel(entry, input.date || todayInJapan(), (row?.n ?? 0) + 1))
 
   await db.insert(schema.evidenceFiles).values({
     entryId: id,
