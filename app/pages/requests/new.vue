@@ -216,7 +216,7 @@ async function onSubmit() {
           <label><span>支店名・出張所名<span class="req">*</span></span><input v-model="form.bank.branchName" placeholder="例：渋谷支店" required></label>
         </div>
         <RadioWithOther v-model="form.bank.accountType" label="振込先の口座種別" :options="ACCOUNT_TYPES" other required />
-        <div class="row">
+        <div class="row account">
           <label><span>振込先の口座番号<span class="req">*</span></span><input v-model="form.bank.accountNumber" inputmode="numeric" pattern="\d{1,8}" required></label>
           <label><span>振込先の口座名義<span class="req">*</span></span><input v-model="form.bank.accountName" required></label>
         </div>
