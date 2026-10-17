@@ -115,7 +115,7 @@ form :where(input:not([type="checkbox"]):not([type="radio"]), select) { max-widt
 form textarea { max-width: 48rem; }
 form input[type="date"], form input[type="datetime-local"] { max-width: 13rem; }
 /* 金額・口座番号など数字の欄 */
-form input[inputmode="numeric"] { max-width: 15rem; }
+form input[inputmode="numeric"] { max-width: 12rem; }
 /* 氏名・数量など短い文字の欄 */
 form input.w-m { max-width: 20rem; }
 /* 選択肢が短い選択欄（返金時期など） */
