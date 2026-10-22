@@ -170,7 +170,7 @@ tr.done td { color: var(--muted); }
 tr.detail td { background: var(--sub); }
 td small { color: var(--muted); }
 .badge { white-space: nowrap; font-size: .8rem; }
-/* 状態：未対応（赤）→ 対応済み（証憑待ち、黄土色）→ 証憑提出済み（緑） */
+/* 状態：執行待ち（赤）→ 証憑提出待ち（黄土色）→ 完了（緑） */
 .badge.pending { color: var(--danger); font-weight: 600; }
 .badge.done { color: #9a6b00; font-weight: 600; }
 .badge.complete { color: var(--done); }
