@@ -37,6 +37,12 @@ type Row = NonNullable<typeof entries.value>[number]
 
 /** 証憑が出ているか（執行依頼は台帳から付けた証憑、以前の証憑提出フォームの申請はその添付） */
 const hasEvidence = (row: Row) => (row.kind === 'execution' ? row.evidences.length > 0 : Boolean(row.attachmentId))
+/**
+ * 状態：未対応 → 対応済み（ZAI が執行した）→ 証憑提出済み（執行して証憑もそろった＝完了）。
+ * 証憑が先に出ていても、ZAI が対応するまでは「未対応」（立替の返金待ちなど）。
+ */
+const STAGE_LABELS = { pending: '未対応', done: '対応済み', complete: '証憑提出済み' } as const
+const stageOf = (row: Row): keyof typeof STAGE_LABELS => (row.status !== 'done' ? 'pending' : hasEvidence(row) ? 'complete' : 'done')
 const evidenceStatus = (row: Row) => (row.kind === 'execution'
   ? (row.evidences.length ? `${row.evidences.length}件` : '未提出')
   : (row.attachmentId ? 'あり' : '未提出'))
@@ -267,7 +273,8 @@ async function setDone(row: Row, done: boolean) {
               <td data-label="期限・予定日">{{ row.deadline }}</td>
               <td data-label="申請者">{{ row.applicantName }}<small>（{{ row.department }}/{{ row.inCharge }}）</small></td>
               <td class="c-status">
-                <span class="badge" :class="row.status">{{ row.status === 'done' ? `対応済 ${dateTime(row.executedAt)}` : '未対応' }}</span>
+                <span class="badge" :class="stageOf(row)">{{ STAGE_LABELS[stageOf(row)] }}</span>
+                <small v-if="row.status === 'done'" class="executed-at">{{ dateTime(row.executedAt) }}</small>
               </td>
               <td data-label="証憑" :class="{ 'no-evidence': !hasEvidence(row) }">{{ evidenceStatus(row) }}</td>
             </tr>
