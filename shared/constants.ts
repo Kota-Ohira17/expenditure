@@ -88,7 +88,7 @@ export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 export const VIEWS = {
   number: '番号順',
   deadline: '期限順',
-  pending: '未対応',
+  pending: '執行待ち',
   noEvidence: '証憑未提出',
   振込: '振込',
   発注: '発注',
