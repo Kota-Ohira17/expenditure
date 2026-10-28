@@ -36,7 +36,7 @@ async function logout() {
           <span class="avatar" aria-hidden="true">{{ user?.name?.slice(0, 1) }}</span>
         </NuxtLink>
         <button type="button" class="icon-button" title="ログアウト" aria-label="ログアウト" @click="logout">
-          <AppIcon name="logout" />
+          <AppIcon name="log-out" />
         </button>
       </div>
     </header>
