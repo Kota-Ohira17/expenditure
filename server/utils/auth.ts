@@ -38,7 +38,8 @@ export async function loginAs(event: H3Event, rawEmail: string, name: string) {
       set: { name, lastLoginAt: now, ...(admin ? { role: 'admin' as const } : {}) },
     })
     .returning()
-  await setUserSession(event, { user: toSessionUser(user!), loggedInAt: Date.now() })
+  // 前にログインしていた人の情報（スプレッドシート用の Google の許可など）を残さないよう、セッションを作り直す
+  await replaceUserSession(event, { user: toSessionUser(user!), loggedInAt: Date.now() })
 }
 
 /**

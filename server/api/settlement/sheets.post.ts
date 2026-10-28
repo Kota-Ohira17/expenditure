@@ -17,5 +17,5 @@ export default defineEventHandler(async (event) => {
   if (!spreadsheetId) throw createError({ statusCode: 400, message: 'スプレッドシートの URL を確認してください（https://docs.google.com/spreadsheets/d/… の形）。' })
 
   const tables = await buildSettlementTables(getRequestURL(event).origin)
-  return writeTablesToSpreadsheet(spreadsheetId, tables, { dryRun })
+  return writeTablesToSpreadsheet(spreadsheetId, tables, { token: await sheetsAccessToken(event), dryRun })
 })

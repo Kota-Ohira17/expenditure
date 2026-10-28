@@ -26,9 +26,6 @@ export default defineNuxtConfig({
     n8nWebhookSecret: '',
     /** 期限切れリマインド（/api/cron/overdue-reminder）を呼ぶときの合言葉。Vercel の Cron なら CRON_SECRET でもよい */
     cronSecret: '',
-    // 決算シートを Google スプレッドシートに書き出すサービスアカウント
-    googleServiceAccountEmail: '',
-    googleServiceAccountPrivateKey: '',
     // テスト用ログインの合言葉（テスター用と、NUXT_ADMIN_EMAILS の管理者用）
     testLoginCode: '',
     testAdminCode: '',

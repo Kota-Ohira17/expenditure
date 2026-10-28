@@ -1,6 +1,5 @@
-/** スプレッドシート出力の設定状況（共有してもらうサービスアカウントのメールアドレス） */
+/** スプレッドシート出力の設定状況（Google の OAuth の設定があるか、本人の Google の許可がまだ有効か） */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'exportSettlement')
-  const sa = serviceAccount()
-  return { configured: !!sa, serviceAccountEmail: sa?.email ?? '' }
+  const user = await requirePermission(event, 'exportSettlement')
+  return { configured: sheetsOAuthConfigured(), email: user.email, connected: !!(await sheetsAccessToken(event)) }
 })

@@ -63,18 +63,18 @@
 台帳の「決算シートをスプレッドシートに出力」で、指定したスプレッドシートの「決算」「証憑」「執行一覧」シートを書き直す（なければ追加。ほかのシートには触らない）。
 「証憑」シートと「執行一覧」シートの証憑の列には、請求書・領収書を開くリンク（アプリへのログインが必要）が入る。Excel でのダウンロードも同じ内容。
 
-アプリは Google の**サービスアカウント**で書き込む。
+アプリは、**出力する人自身の Google アカウント**（アプリに登録しているメールアドレス）で書き込む。
+初めて書き出すとき（と、許可が切れた約1時間後）は Google の画面に移り、スプレッドシートへの書き込みを許可すると、台帳に戻って続きを書き出す。
+登録しているメールアドレスと違うアカウントで許可した場合は書き込まない。出力先は、その人が編集できるスプレッドシートならどれでもよい（共有の手順は要らない）。
 
-1. Google Cloud Console でプロジェクトを作り、「Google Sheets API」を有効にする
-2. 「IAM と管理 → サービスアカウント」でサービスアカウントを作り、「鍵 → 新しい鍵を作成（JSON）」で鍵をダウンロードする
-3. `.env` に設定する（JSON の `client_email` と `private_key`）
-   ```
-   NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL=xxxx@xxxx.iam.gserviceaccount.com
-   NUXT_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----\n"
-   ```
-4. 出力先のスプレッドシートを、そのサービスアカウントのメールアドレスと「編集者」として共有する
+設定（Google ログインと同じ OAuth クライアントを使う）:
 
-ECC（Google Workspace）の設定で組織外との共有が禁止されている場合は、出力先を個人の Google アカウントのスプレッドシートにするか、Excel で出力して取り込む。
+1. Google Cloud Console のプロジェクトで「Google Sheets API」を有効にする
+2. 「OAuth 同意画面」のスコープに `https://www.googleapis.com/auth/spreadsheets` を足す
+3. OAuth クライアントの「承認済みのリダイレクト URI」に `https://<ドメイン>/auth/google-sheets`（ローカルは `http://localhost:3000/auth/google-sheets`）を足す
+4. `.env` の `NUXT_OAUTH_GOOGLE_CLIENT_ID` / `NUXT_OAUTH_GOOGLE_CLIENT_SECRET` を設定する（Google ログインを使わない場合も、スプレッドシート出力にはこの2つが要る）
+
+OAuth 同意画面が「テスト中」のままなら、書き出す人を「テストユーザー」に足しておく。
 
 ## ローカルで動かす
 

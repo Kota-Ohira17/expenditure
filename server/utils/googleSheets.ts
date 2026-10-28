@@ -1,53 +1,40 @@
-import { createSign } from 'node:crypto'
+import type { H3Event } from 'h3'
 import type { Table } from './settlement'
 
 /**
- * Google スプレッドシートへの書き出し（サービスアカウントで認証）。
- * 書き出し先のスプレッドシートは、サービスアカウントのメールアドレスと「編集者」として共有しておく必要がある。
- * 環境変数: NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL / NUXT_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+ * Google スプレッドシートへの書き出し。出力する人自身の Google アカウント（アプリに登録しているメールアドレス）で書き込む。
+ * 「書き出す」を押したとき、まだ Google の許可をもらっていなければ /auth/google-sheets で許可をもらい、
+ * そのアクセストークンをセッション（サーバーだけが読める secure）に1時間ほど覚えておく。
+ * 書き出し先は、その人が編集できるスプレッドシートならどれでもよい（共有の手順は要らない）。
  */
 
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 
-export function serviceAccount() {
-  const { googleServiceAccountEmail: email, googleServiceAccountPrivateKey: key } = useRuntimeConfig()
-  // 環境変数では改行が \n と書かれていることが多いので戻す
-  return email && key ? { email, privateKey: key.replace(/\\n/g, '\n') } : null
+/** Google の許可をもらうのに必要な OAuth の設定（NUXT_OAUTH_GOOGLE_CLIENT_ID / _SECRET）があるか */
+export function sheetsOAuthConfigured() {
+  const { clientId, clientSecret } = useRuntimeConfig().oauth.google
+  return !!clientId && !!clientSecret
 }
+
+/** セッションに覚えている、スプレッドシートを書き込むためのアクセストークン（期限が近ければ null） */
+export async function sheetsAccessToken(event: H3Event) {
+  const { secure } = await getUserSession(event)
+  const token = secure?.googleSheets
+  return token && token.expiresAt > Date.now() + 60_000 ? token.accessToken : null
+}
+
+/** Google の許可がない・切れたとき。画面はこれを受けて /auth/google-sheets に移る */
+export const needsGoogleAuth = () => createError({
+  statusCode: 401,
+  message: 'Google アカウントでスプレッドシートへの書き込みを許可してください。',
+  data: { needsGoogleAuth: true },
+})
 
 /** URL（…/spreadsheets/d/<ID>/edit…）か ID そのものから ID を取り出す */
 export function spreadsheetIdOf(input: string) {
   const m = input.match(/\/spreadsheets\/d\/([\w-]+)/)
   if (m) return m[1]!
   return /^[\w-]{20,}$/.test(input.trim()) ? input.trim() : null
-}
-
-async function accessToken() {
-  const sa = serviceAccount()
-  if (!sa) throw createError({ statusCode: 500, message: 'スプレッドシート出力用のサービスアカウントが設定されていません（README の「決算シートをスプレッドシートに出力」参照）。' })
-  const now = Math.floor(Date.now() / 1000)
-  const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
-  const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
-    iss: sa.email,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600,
-  })}`
-  let signature: string
-  try {
-    signature = createSign('RSA-SHA256').update(unsigned).sign(sa.privateKey, 'base64url')
-  }
-  catch {
-    throw createError({ statusCode: 500, message: 'サービスアカウントの秘密鍵（NUXT_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY）が読み取れません。' })
-  }
-  const res = await $fetch<{ access_token: string }>('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${signature}` }),
-  }).catch(() => {
-    throw createError({ statusCode: 500, message: 'Google の認証に失敗しました。サービスアカウントの設定を確認してください。' })
-  })
-  return res.access_token
 }
 
 /** Sheets API を呼ぶ。権限・存在のエラーは分かる日本語にする */
@@ -62,11 +49,11 @@ async function sheetsApi<T>(token: string, path: string, init: { method?: 'GET' 
   }
   catch (error) {
     const status = (error as { statusCode?: number }).statusCode
-    const email = serviceAccount()?.email
+    if (status === 401) throw needsGoogleAuth()
     if (status === 403 || status === 404) {
       throw createError({
         statusCode: 400,
-        message: `スプレッドシートを開けませんでした。URL が正しいか、スプレッドシートを ${email} と「編集者」として共有しているか確認してください。`,
+        message: 'スプレッドシートを開けませんでした。URL が正しいか、あなたのアカウントでそのスプレッドシートを編集できるか確認してください。',
       })
     }
     throw createError({ statusCode: 502, message: 'スプレッドシートへの書き込みに失敗しました。時間をおいてもう一度試してください。' })
@@ -99,7 +86,7 @@ function cellValue(v: Table['rows'][number]['values'][string] | undefined): stri
  * 表をスプレッドシートに書き出す。同じ名前のシートがあれば中身を消して書き直し、なければ追加する。
  * dryRun のときは Google に送らず、送る予定の内容の概要を返す。
  */
-export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Table[], { dryRun = false } = {}) {
+export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Table[], { token, dryRun = false }: { token: string | null, dryRun?: boolean }) {
   const plan = tables.map(t => ({
     name: t.name,
     values: [
@@ -112,7 +99,7 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
     return { dryRun: true, sheets: plan.map(p => ({ name: p.name, rows: p.values.length, columns: Math.max(...p.values.map(v => v.length)), sample: p.values.slice(0, 3) })) }
   }
 
-  const token = await accessToken()
+  if (!token) throw needsGoogleAuth()
   const meta = await sheetsApi<{ sheets: { properties: { sheetId: number, title: string }, basicFilter?: object }[] }>(
     token, spreadsheetId, { query: { fields: 'sheets(properties(sheetId,title),basicFilter.range)' } },
   )
