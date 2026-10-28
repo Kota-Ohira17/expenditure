@@ -88,6 +88,20 @@ export const budgetLines = sqliteTable('budget_lines', {
 })
 
 /**
+ * 取り込んだ「支出」シートの行をそのまま（見出しより上の行・見出しの行・金額のない見出しの行も含めて）持つ。
+ * 決算シートを元のシートと同じ形で出力するために使う。予算を取り込むたびに入れ替える。
+ */
+export const budgetSheetRows = sqliteTable('budget_sheet_rows', {
+  sortOrder: integer('sort_order').primaryKey(),
+  /** preamble: 見出しより上の行（「支出の部」）／ header: 見出しの行／ row: それより下の行 */
+  role: text('role', { enum: ['preamble', 'header', 'row'] }).notNull(),
+  /** セルの文字列の配列（JSON） */
+  cells: text('cells', { mode: 'json' }).$type<string[]>().notNull(),
+  /** この行が明細（金額の入った行）なら、その明細の key */
+  lineKey: text('line_key'),
+})
+
+/**
  * 申請と予算明細の対応（1申請に複数明細）。予算を取り込み直しても過去の申請が崩れないよう、
  * 申請時点の明細の内容をコピーして持つ。
  */

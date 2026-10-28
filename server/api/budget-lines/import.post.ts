@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   if (!file) throw createError({ statusCode: 400, message: 'CSV ファイルを選んでください。' })
 
   const text = decodeCsv(file.data)
-  const lines = parseBudgetCsv(text)
+  const { lines, sheetRows } = parseBudgetCsv(text)
   const kindPart = parts.find(p => p.name === 'kind')?.data.toString()
   // 値は ASCII（main / revised）で受け取る（送信元の文字コードに左右されないように）
   const budgetKind: BudgetKind | null = kindPart === 'main' ? '本予算' : kindPart === 'revised' ? '補正予算' : null
@@ -26,8 +26,13 @@ export default defineEventHandler(async (event) => {
   const CHUNK = 100
   await db.batch([
     db.delete(schema.budgetLines),
+    db.delete(schema.budgetSheetRows),
     ...Array.from({ length: Math.ceil(lines.length / CHUNK) }, (_, i) =>
       db.insert(schema.budgetLines).values(lines.slice(i * CHUNK, (i + 1) * CHUNK).map(l => ({ ...l, importedAt, budgetKind }))),
+    ),
+    // 決算シートを元のシートと同じ形で出すため、シートの行もそのまま入れ替える
+    ...Array.from({ length: Math.ceil(sheetRows.length / CHUNK) }, (_, i) =>
+      db.insert(schema.budgetSheetRows).values(sheetRows.slice(i * CHUNK, (i + 1) * CHUNK)),
     ),
   ] as const)
 

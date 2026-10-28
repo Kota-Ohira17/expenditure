@@ -1,32 +1,31 @@
 import { asc, eq, inArray } from 'drizzle-orm'
-import { buildSheetRows, SHEET_COLUMN_LABELS, SHEET_COLUMNS, type Level } from '../../shared/budgetRows'
-import type { BudgetLine, Entry, EntryItem } from '../db/schema'
+import type { Entry, EntryItem } from '../db/schema'
 import type { EvidenceView } from './evidence'
 
 /**
  * 決算シートの中身。Excel（/api/settlement.xlsx）とGoogleスプレッドシート（/api/settlement/sheets）の
  * 両方に同じ表を書き出すため、書き出し方に依存しない形で作る。
- * - 「決算」: 本予算「支出」シートと同じ並びで、明細ごとに予算額・執行額・差額・執行率・証憑。見出しの行には小計
+ * - 「決算」: 取り込んだ「支出」シートと同じ行・列・色のまま、右に執行額・差額・執行率・申請番号と、款・担当・局ごとの執行額の合計
+ * - 「証憑」: 同じく「支出」シートと同じ形のまま、右に明細ごとの執行額・申請番号・証憑（1件1列のリンク）
  * - 「執行一覧」: 対応済みの申請を明細ごとに1行ずつ（証憑へのリンクつき）
  */
 
-export type CellValue = string | number | Date | null | { text: string, url: string }
+export type CellValue = string | number | boolean | Date | null | { text: string, url: string }
 
 export interface TableColumn {
   key: string
   header: string
-  /** 文字数の目安 */
+  /** 文字数の目安（13.3 で元のシートと同じ 100px） */
   width: number
-  format?: 'yen' | 'rate' | 'date'
+  /** yen: 1,234 ／ currency: ¥1,234（元のシートと同じ）／ check: TRUE・FALSE（スプレッドシートではチェックボックス） */
+  format?: 'yen' | 'currency' | 'rate' | 'date' | 'check'
 }
 
 export interface TableRow {
   values: Record<string, CellValue>
   bold?: boolean
-  /** 背景色（RRGGBB） */
-  fill?: string
-  /** 背景色を塗り始める列（この列から右だけ塗る。なければ行全体） */
-  fillFrom?: string
+  /** 背景色（RRGGBB）を塗る列の範囲（from 以上 to 未満の列番号） */
+  fills?: { from: number, to: number, color: string }[]
   /** 上に二重線（総計の行） */
   topBorder?: boolean
 }
@@ -35,17 +34,18 @@ export interface Table {
   name: string
   columns: TableColumn[]
   rows: TableRow[]
+  /** 列見出しより上に置く行（元のシートの「支出の部」など） */
+  preamble?: string[][]
+  /** 元の予算シートと同じ見た目にする（Arial 10、見出しは太字にしない、フィルタなし） */
+  sheetStyle?: boolean
 }
 
-/** 本予算「支出」シートと同じ色。その階層の列から右側だけを塗る（目・節は塗らない） */
-const LEVEL_FILL: Partial<Record<Level, string>> = {
-  bureau: 'FFF2CC',
-  team: 'D9EAD3',
-  kan: 'C9DAF8',
-  kou: 'FCE5CD',
-}
 /** 列見出しの行の色（シートと同じグレー） */
 export const HEADER_FILL = 'D9D9D9'
+
+/** 元のシートで100pxの列の幅 */
+const SHEET_COLUMN_WIDTH = 13.3
+const SEQS_WIDTH = 16
 
 type DoneEntry = Entry & { items: EntryItem[], evidences: EvidenceView[], attachmentName: string | null }
 type Link = { text: string, url: string }
@@ -72,7 +72,13 @@ function evidenceCellOf(links: Link[]): CellValue {
 
 export async function buildSettlementTables(origin: string): Promise<Table[]> {
   const db = useDb()
-  const lines = await db.select().from(schema.budgetLines).orderBy(asc(schema.budgetLines.sortOrder))
+  const sheetRows = await db.select().from(schema.budgetSheetRows).orderBy(asc(schema.budgetSheetRows.sortOrder))
+  if (!sheetRows.some(r => r.role === 'header')) {
+    throw createError({
+      statusCode: 400,
+      message: '決算シートは、取り込んだ予算の「支出」シートと同じ形で作ります。「予算」の画面から「支出」シートの CSV を取り込み直してください。',
+    })
+  }
   const rows = await withEvidences(await withItems(
     await db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).orderBy(asc(schema.entries.createdAt)),
   ))
@@ -82,130 +88,194 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
     ? (await db.select({ id: schema.attachments.id, fileName: schema.attachments.fileName }).from(schema.attachments).where(inArray(schema.attachments.id, attachmentIds))).map(a => [a.id, a.fileName])
     : [])
   const done: DoneEntry[] = rows.map(r => ({ ...r, attachmentName: r.attachmentId ? names.get(r.attachmentId) ?? null : null }))
-  return [settlementTable(lines, done, origin), executionTable(done, origin)]
+  const sheet = budgetSheetOf(sheetRows)
+  return [settlementTable(sheet, done), evidenceTable(sheet, done, origin), executionTable(done, origin)]
 }
 
-function settlementTable(lines: BudgetLine[], done: DoneEntry[], origin: string): Table {
-  // 明細ごとの執行額・申請・証憑の集計
-  const agg = new Map<string, { actual: number, unknown: number, entries: DoneEntry[] }>()
+type StoredSheetRow = { role: 'preamble' | 'header' | 'row', cells: string[], lineKey: string | null }
+
+/** 元のシートの見出しから探す列（見出しの書き方の違いは normalizeHeader でそろえる） */
+const NAME_COLUMNS = { bureau: ['局'], team: ['担当', '担当名'], kan: ['款'], kou: ['項'] } as const
+/** 階層ごとの色と、塗り終わりの列（元のシートでは、局の行は局合計まで・担当の行は担当合計まで…と塗られている） */
+const LEVEL_STYLE = {
+  bureau: { color: 'FFF2CC', until: '局合計' },
+  team: { color: 'D9EAD3', until: '担当合計' },
+  kan: { color: 'C9DAF8', until: '款合計' },
+  kou: { color: 'FCE5CD', until: '備考' },
+} as const
+type GroupLevel = keyof typeof LEVEL_STYLE
+
+/**
+ * 取り込んだ「支出」シートを、列（見出し・書式）と行に分ける。
+ * 金額の列は数値、TRUE/FALSE だけの列は真偽値にして、元のシートと同じ表示にする。
+ */
+function budgetSheetOf(stored: StoredSheetRow[]) {
+  const header = stored.find(r => r.role === 'header')!.cells
+  const body = stored.filter(r => r.role === 'row')
+  const width = Math.max(header.length, ...body.map(r => r.cells.length))
+  const names = Array.from({ length: width }, (_, i) => normalizeHeader(header[i] ?? ''))
+  const indexOf = (candidates: readonly string[]) => candidates.map(c => names.indexOf(c)).find(i => i >= 0) ?? -1
+
+  const isCheck = (i: number) => {
+    const values = body.map(r => (r.cells[i] ?? '').trim()).filter(Boolean)
+    return values.length > 0 && values.every(v => v === 'TRUE' || v === 'FALSE')
+  }
+  const isMoney = (i: number) => /予算額|金額|合計$/.test(names[i]!)
+  const formats = names.map((_, i) => (isMoney(i) ? 'currency' as const : isCheck(i) ? 'check' as const : undefined))
+
+  const columns: TableColumn[] = names.map((_, i) => ({ key: `c${i}`, header: header[i] ?? '', width: SHEET_COLUMN_WIDTH, format: formats[i] }))
+  const nameIndex = Object.fromEntries(Object.entries(NAME_COLUMNS).map(([k, v]) => [k, indexOf(v)])) as Record<GroupLevel, number>
+  const untilIndex = (level: GroupLevel) => {
+    const i = names.indexOf(LEVEL_STYLE[level].until)
+    return i >= 0 ? i + 1 : width
+  }
+
+  const rows = body.map((r) => {
+    const values: Record<string, CellValue> = {}
+    r.cells.forEach((raw, i) => {
+      const v = raw.trim()
+      if (!v) return
+      if (formats[i] === 'currency') values[`c${i}`] = parseMoney(v) ?? raw
+      else if (formats[i] === 'check') values[`c${i}`] = v === 'TRUE'
+      else values[`c${i}`] = raw
+    })
+    // 局・担当・款・項の名前がある行は、元のシートと同じくその列から右を塗る
+    const level = (Object.keys(LEVEL_STYLE) as GroupLevel[]).find(l => nameIndex[l] >= 0 && (r.cells[nameIndex[l]] ?? '').trim())
+    const fills = level ? [{ from: nameIndex[level], to: untilIndex(level), color: LEVEL_STYLE[level].color }] : undefined
+    return { values, fills, level, lineKey: r.lineKey }
+  })
+
+  return {
+    preamble: stored.filter(r => r.role === 'preamble').map(r => r.cells),
+    columns,
+    rows,
+    /** 「予算にない項目」で名前を書く列（項の列。なければ2列目） */
+    nameColumn: `c${nameIndex.kou >= 0 ? nameIndex.kou : 1}`,
+  }
+}
+type BudgetSheet = ReturnType<typeof budgetSheetOf>
+
+/** 明細ごとの執行額・申請。予算に載っていない申請（手入力・取り込み直しで消えた明細）は別にまとめる */
+function aggregate(sheet: BudgetSheet, done: DoneEntry[]) {
+  const lineKeys = new Set(sheet.rows.map(r => r.lineKey).filter(Boolean))
+  const byLine = new Map<string, { actual: number, unknown: number, entries: DoneEntry[] }>()
+  const outside: { itemNumber: string, name: string, actual: number | null, entry: DoneEntry }[] = []
   for (const entry of done) {
+    if (!entry.items.length) {
+      outside.push({ itemNumber: entry.itemNumber, name: entry.itemName, actual: entry.amount, entry })
+      continue
+    }
     for (const item of entry.items) {
-      const rec = agg.get(item.lineKey) ?? { actual: 0, unknown: 0, entries: [] }
       const actual = actualAmountOf(item, entry)
+      if (!lineKeys.has(item.lineKey)) {
+        outside.push({ itemNumber: item.itemNumber, name: item.label, actual, entry })
+        continue
+      }
+      const rec = byLine.get(item.lineKey) ?? { actual: 0, unknown: 0, entries: [] }
       if (actual == null) rec.unknown++
       else rec.actual += actual
       if (!rec.entries.includes(entry)) rec.entries.push(entry)
-      agg.set(item.lineKey, rec)
+      byLine.set(item.lineKey, rec)
     }
   }
+  return { byLine, outside }
+}
 
-  /** 証憑の列: 1件ならリンク、複数ならファイル名を並べて執行一覧を見てもらう */
-  const evidenceCell = (entries: DoneEntry[]): CellValue => {
-    const links = entries.flatMap(e => evidenceLinks(e, origin))
-    if (links.length <= 1) return evidenceCellOf(links)
-    return `${links.map(l => l.text).join('、')}（執行一覧にリンク）`
-  }
-
+function settlementTable(sheet: BudgetSheet, done: DoneEntry[]): Table {
+  const { byLine, outside } = aggregate(sheet, done)
   const columns: TableColumn[] = [
-    ...SHEET_COLUMNS.map(c => ({ key: c, header: SHEET_COLUMN_LABELS[c], width: c === 'number' ? 14 : c === 'bureau' || c === 'team' ? 10 : 22 })),
-    { key: 'quantity', header: '数量', width: 10 },
-    { key: 'vendor', header: '取引先', width: 14 },
-    { key: 'budget', header: '予算額', width: 13, format: 'yen' },
-    { key: 'actual', header: '執行額', width: 13, format: 'yen' },
-    { key: 'diff', header: '差額（予算−執行）', width: 15, format: 'yen' },
+    ...sheet.columns,
+    { key: 'actual', header: '執行額', width: SHEET_COLUMN_WIDTH, format: 'currency' },
+    { key: 'diff', header: '差額（予算−執行）', width: SHEET_COLUMN_WIDTH, format: 'currency' },
     { key: 'rate', header: '執行率', width: 8, format: 'rate' },
-    { key: 'count', header: '件数', width: 6 },
-    { key: 'seqs', header: '申請番号', width: 20 },
-    { key: 'evidence', header: '証憑', width: 24 },
-    { key: 'note', header: '備考', width: 22 },
+    { key: 'seqs', header: '申請番号', width: SEQS_WIDTH },
+    { key: 'kanActual', header: '款執行合計', width: SHEET_COLUMN_WIDTH, format: 'currency' },
+    { key: 'teamActual', header: '担当執行合計', width: SHEET_COLUMN_WIDTH, format: 'currency' },
+    { key: 'bureauActual', header: '局執行合計', width: SHEET_COLUMN_WIDTH, format: 'currency' },
+    { key: 'note', header: '執行の備考', width: SHEET_COLUMN_WIDTH },
   ]
-  const rows: TableRow[] = []
+  const budgetColumn = sheet.columns.find(c => /予算額|金額/.test(normalizeHeader(c.header)))?.key
 
-  const { rows: sheetRows, descendants } = buildSheetRows(lines)
-  const byKey = new Map(lines.map(l => [l.key, l]))
-  const totalsOf = (keys: string[]) => keys.reduce((t, k) => {
-    const a = agg.get(k)
-    t.budget += byKey.get(k)?.budgetAmount ?? 0
-    t.actual += a?.actual ?? 0
-    t.unknown += a?.unknown ?? 0
-    return t
-  }, { budget: 0, actual: 0, unknown: 0 })
-  // 局・担当の見出しは descendants に入らないので、明細から直接まとめる
-  const bureauKeys = Map.groupBy(lines, l => `${l.bureauNo}|${l.bureau}`)
-  const teamKeys = Map.groupBy(lines, l => `${l.bureauNo}|${l.bureau}|${l.team}`)
-  let currentBureau = ''
+  // 款・担当・局の行に、その下の明細の執行額の合計を出す（元のシートの款合計・担当合計・局合計と同じ考え方）
+  const totals = new Map<number, number>()
+  const current: Partial<Record<'bureau' | 'team' | 'kan', number>> = {}
+  sheet.rows.forEach((r, i) => {
+    if (r.level === 'bureau') {
+      current.bureau = i
+      delete current.team
+      delete current.kan
+    }
+    else if (r.level === 'team') {
+      current.team = i
+      delete current.kan
+    }
+    else if (r.level === 'kan') current.kan = i
+    const actual = r.lineKey ? byLine.get(r.lineKey)?.actual ?? 0 : 0
+    for (const g of Object.values(current)) totals.set(g, (totals.get(g) ?? 0) + actual)
+  })
+  const totalKey = { bureau: 'bureauActual', team: 'teamActual', kan: 'kanActual' } as const
 
-  for (const row of sheetRows) {
-    if (row.kind === 'group') {
-      let keys: string[] = []
-      if (row.level === 'bureau') {
-        currentBureau = `${row.cells.number ?? ''}|${row.cells.bureau ?? ''}`
-        keys = bureauKeys.get(currentBureau)?.map(l => l.key) ?? []
+  const rows: TableRow[] = sheet.rows.map((r, i) => {
+    const values = { ...r.values }
+    if (r.level && r.level !== 'kou') values[totalKey[r.level]] = totals.get(i) ?? 0
+    const a = r.lineKey ? byLine.get(r.lineKey) : undefined
+    if (a) {
+      const budget = budgetColumn ? r.values[budgetColumn] : null
+      values.actual = a.actual
+      if (typeof budget === 'number') {
+        values.diff = budget - a.actual
+        values.rate = budget ? a.actual / budget : null
       }
-      else if (row.level === 'team') keys = teamKeys.get(`${currentBureau}|${row.cells.team ?? ''}`)?.map(l => l.key) ?? []
-      else keys = descendants.get(row.path!) ?? []
-      const t = totalsOf(keys)
-      rows.push({
-        values: {
-          ...row.cells,
-          budget: t.budget,
-          actual: t.actual,
-          diff: t.budget - t.actual,
-          rate: t.budget ? t.actual / t.budget : null,
-          note: t.unknown ? `執行額未入力 ${t.unknown}件` : '',
-        },
-        bold: row.level === 'bureau' || row.level === 'kan',
-        fill: LEVEL_FILL[row.level],
-        fillFrom: LEVEL_FILL[row.level] ? row.level : undefined,
-      })
-      continue
+      values.seqs = a.entries.map(e => e.seq).join(', ')
+      if (a.unknown) values.note = `執行額未入力 ${a.unknown}件`
     }
-    const l = row.line!
-    const a = agg.get(l.key)
-    rows.push({
-      values: {
-        ...row.cells,
-        quantity: l.quantity,
-        vendor: l.vendor,
-        budget: l.budgetAmount,
-        actual: a ? a.actual : null,
-        diff: a ? l.budgetAmount - a.actual : null,
-        rate: a && l.budgetAmount ? a.actual / l.budgetAmount : null,
-        count: a?.entries.length ?? null,
-        seqs: a?.entries.map(e => e.seq).join(', ') ?? '',
-        evidence: a ? evidenceCell(a.entries) : null,
-        note: a?.unknown ? `執行額未入力 ${a.unknown}件` : '',
-      },
-    })
-  }
-
-  // 予算にない項目（手入力の申請）
-  const outsideBudget = done.filter(e => !e.items.length)
-  if (outsideBudget.length) {
-    rows.push({ values: {} })
-    rows.push({ values: { number: '予算にない項目' }, bold: true })
-    for (const e of outsideBudget) {
-      rows.push({ values: { number: e.itemNumber, kou: e.itemName, actual: e.amount, count: 1, seqs: e.seq, evidence: evidenceCellOf(evidenceLinks(e, origin)) } })
-    }
-  }
-
-  // 総計
-  const all = totalsOf(lines.map(l => l.key))
-  const outside = outsideBudget.reduce((s, e) => s + (e.amount ?? 0), 0)
-  rows.push({ values: {} })
-  rows.push({
-    values: {
-      number: '総計',
-      budget: all.budget,
-      actual: all.actual + outside,
-      diff: all.budget - all.actual - outside,
-      rate: all.budget ? (all.actual + outside) / all.budget : null,
-    },
-    bold: true,
-    topBorder: true,
+    return { values, fills: r.fills }
   })
 
-  return { name: '決算', columns, rows }
+  if (outside.length) {
+    rows.push({ values: {} }, { values: { c0: '予算にない項目' } })
+    for (const o of outside) {
+      rows.push({ values: { c0: o.itemNumber, [sheet.nameColumn]: o.name, actual: o.actual, seqs: o.entry.seq } })
+    }
+  }
+  return { name: '決算', columns, rows, preamble: sheet.preamble, sheetStyle: true }
+}
+
+function evidenceTable(sheet: BudgetSheet, done: DoneEntry[], origin: string): Table {
+  const { byLine, outside } = aggregate(sheet, done)
+  /** 明細ごとの証憑（同じファイルは1回だけ） */
+  const linksOf = (entries: DoneEntry[]) => {
+    const links = entries.flatMap(e => evidenceLinks(e, origin))
+    return links.filter((l, i) => links.findIndex(x => x.url === l.url) === i)
+  }
+  const lineLinks = new Map([...byLine].map(([key, a]) => [key, linksOf(a.entries)]))
+  const outsideLinks = outside.map(o => linksOf([o.entry]))
+  const count = Math.max(1, ...[...lineLinks.values(), ...outsideLinks].map(l => l.length))
+
+  const columns: TableColumn[] = [
+    ...sheet.columns,
+    { key: 'actual', header: '執行額', width: SHEET_COLUMN_WIDTH, format: 'currency' },
+    { key: 'seqs', header: '申請番号', width: SEQS_WIDTH },
+    ...Array.from({ length: count }, (_, i) => ({ key: `ev${i}`, header: `証憑${i + 1}`, width: 30 })),
+  ]
+  const evidenceValues = (links: Link[]) => Object.fromEntries(links.map((l, i) => [`ev${i}`, l]))
+
+  const rows: TableRow[] = sheet.rows.map((r) => {
+    const a = r.lineKey ? byLine.get(r.lineKey) : undefined
+    if (!a) return { values: r.values, fills: r.fills }
+    return {
+      values: { ...r.values, actual: a.actual, seqs: a.entries.map(e => e.seq).join(', '), ...evidenceValues(lineLinks.get(r.lineKey!)!) },
+      fills: r.fills,
+    }
+  })
+
+  if (outside.length) {
+    rows.push({ values: {} }, { values: { c0: '予算にない項目' } })
+    outside.forEach((o, i) => {
+      rows.push({ values: { c0: o.itemNumber, [sheet.nameColumn]: o.name, actual: o.actual, seqs: o.entry.seq, ...evidenceValues(outsideLinks[i]!) } })
+    })
+  }
+  return { name: '証憑', columns, rows, preamble: sheet.preamble, sheetStyle: true }
 }
 
 function executionTable(done: DoneEntry[], origin: string): Table {

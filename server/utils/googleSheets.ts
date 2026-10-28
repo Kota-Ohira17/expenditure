@@ -75,6 +75,7 @@ async function sheetsApi<T>(token: string, path: string, init: { method?: 'GET' 
 
 const NUMBER_FORMAT = {
   yen: { type: 'NUMBER', pattern: '#,##0;[Red]-#,##0' },
+  currency: { type: 'CURRENCY', pattern: '[$¥-411]#,##0' },
   rate: { type: 'PERCENT', pattern: '0.0%' },
   date: { type: 'DATE', pattern: 'yyyy/mm/dd' },
 } as const
@@ -86,9 +87,9 @@ const rgb = (hex: string) => ({
 })
 
 /** セルの値。リンクは HYPERLINK 関数、文字は数式として解釈されないよう先頭の = + - @ を無効化する */
-function cellValue(v: Table['rows'][number]['values'][string] | undefined): string | number {
+function cellValue(v: Table['rows'][number]['values'][string] | undefined): string | number | boolean {
   if (v == null) return ''
-  if (typeof v === 'number') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return v
   if (v instanceof Date) return v.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }).replaceAll('-', '/')
   if (typeof v === 'object') return `=HYPERLINK("${v.url.replaceAll('"', '""')}","${v.text.replaceAll('"', '""')}")`
   return /^[=+\-@]/.test(v) ? `'${v}` : v
@@ -101,17 +102,22 @@ function cellValue(v: Table['rows'][number]['values'][string] | undefined): stri
 export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Table[], { dryRun = false } = {}) {
   const plan = tables.map(t => ({
     name: t.name,
-    values: [t.columns.map(c => c.header), ...t.rows.map(r => t.columns.map(c => cellValue(r.values[c.key])))],
+    values: [
+      ...(t.preamble ?? []),
+      t.columns.map(c => c.header),
+      ...t.rows.map(r => t.columns.map(c => cellValue(r.values[c.key]))),
+    ],
   }))
   if (dryRun) {
-    return { dryRun: true, sheets: plan.map(p => ({ name: p.name, rows: p.values.length, columns: p.values[0]!.length, sample: p.values.slice(0, 3) })) }
+    return { dryRun: true, sheets: plan.map(p => ({ name: p.name, rows: p.values.length, columns: Math.max(...p.values.map(v => v.length)), sample: p.values.slice(0, 3) })) }
   }
 
   const token = await accessToken()
-  const meta = await sheetsApi<{ sheets: { properties: { sheetId: number, title: string } }[] }>(
-    token, spreadsheetId, { query: { fields: 'sheets.properties(sheetId,title)' } },
+  const meta = await sheetsApi<{ sheets: { properties: { sheetId: number, title: string }, basicFilter?: object }[] }>(
+    token, spreadsheetId, { query: { fields: 'sheets(properties(sheetId,title),basicFilter.range)' } },
   )
   const sheetIds = new Map(meta.sheets.map(s => [s.properties.title, s.properties.sheetId]))
+  const hasFilter = new Set(meta.sheets.filter(s => s.basicFilter).map(s => s.properties.title))
 
   // 足りないシートを追加
   const missing = tables.filter(t => !sheetIds.has(t.name))
@@ -123,17 +129,21 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
     for (const r of added.replies) sheetIds.set(r.addSheet.properties.title, r.addSheet.properties.sheetId)
   }
 
-  // 中身と書式を消して、行数・列数をそろえる
+  // 中身・書式・チェックボックス・フィルタを消して、行数・列数・固定する行をそろえる
   await sheetsApi(token, `${spreadsheetId}:batchUpdate`, {
     method: 'POST',
     body: {
       requests: tables.flatMap((t, i) => {
         const sheetId = sheetIds.get(t.name)!
         return [
-          { updateCells: { range: { sheetId }, fields: 'userEnteredValue,userEnteredFormat' } },
+          ...(hasFilter.has(t.name) ? [{ clearBasicFilter: { sheetId } }] : []),
+          { updateCells: { range: { sheetId }, fields: 'userEnteredValue,userEnteredFormat,dataValidation' } },
           {
             updateSheetProperties: {
-              properties: { sheetId, gridProperties: { rowCount: plan[i]!.values.length + 5, columnCount: t.columns.length, frozenRowCount: 1 } },
+              properties: {
+                sheetId,
+                gridProperties: { rowCount: plan[i]!.values.length + 5, columnCount: t.columns.length, frozenRowCount: (t.preamble?.length ?? 0) + 1 },
+              },
               fields: 'gridProperties(rowCount,columnCount,frozenRowCount)',
             },
           },
@@ -151,26 +161,64 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
     },
   })
 
-  // 書式（見出し・数値の形式・階層の色・総計の線・列幅・フィルタ）
+  // 書式（フォント・見出し・数値の形式・階層の色・チェックボックス・総計の線・列幅・フィルタ）
   const requests: object[] = []
   for (const t of tables) {
     const sheetId = sheetIds.get(t.name)!
-    const rowCount = t.rows.length + 1
-    requests.push({
-      repeatCell: {
-        range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
-        cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: rgb(HEADER_FILL) } },
-        fields: 'userEnteredFormat(textFormat,backgroundColor)',
-      },
-    })
-    t.columns.forEach((c, ci) => {
-      if (c.format) {
+    const top = t.preamble?.length ?? 0
+    const rowCount = top + 1 + t.rows.length
+    const all = { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: t.columns.length }
+
+    if (t.sheetStyle) {
+      // 元の予算シートと同じ Arial 10。見出しより上の行（「支出の部」）は太字・12pt
+      requests.push({
+        repeatCell: { range: all, cell: { userEnteredFormat: { textFormat: { fontFamily: 'Arial', fontSize: 10 } } }, fields: 'userEnteredFormat.textFormat(fontFamily,fontSize)' },
+      })
+      if (top) {
         requests.push({
           repeatCell: {
-            range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: ci, endColumnIndex: ci + 1 },
-            cell: { userEnteredFormat: { numberFormat: NUMBER_FORMAT[c.format] } },
-            fields: 'userEnteredFormat.numberFormat',
+            range: { sheetId, startRowIndex: 0, endRowIndex: top },
+            cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 } } },
+            fields: 'userEnteredFormat.textFormat(bold,fontSize)',
           },
+        })
+      }
+    }
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: top, endRowIndex: top + 1, startColumnIndex: 0, endColumnIndex: t.columns.length },
+        cell: { userEnteredFormat: { textFormat: { bold: !t.sheetStyle }, backgroundColor: rgb(HEADER_FILL) } },
+        fields: 'userEnteredFormat(textFormat.bold,backgroundColor)',
+      },
+    })
+
+    t.columns.forEach((c, ci) => {
+      const column = { sheetId, startRowIndex: top + 1, endRowIndex: rowCount, startColumnIndex: ci, endColumnIndex: ci + 1 }
+      if (c.format === 'check') {
+        requests.push({
+          repeatCell: { range: column, cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.horizontalAlignment' },
+        })
+        // TRUE・FALSE の入ったセルだけをチェックボックスにする（続いている行はまとめる）
+        let start = -1
+        t.rows.forEach((r, ri) => {
+          const isBool = typeof r.values[c.key] === 'boolean'
+          if (isBool && start < 0) start = ri
+          const last = ri === t.rows.length - 1
+          if (start >= 0 && (!isBool || last)) {
+            const end = isBool ? ri + 1 : ri
+            requests.push({
+              setDataValidation: {
+                range: { ...column, startRowIndex: top + 1 + start, endRowIndex: top + 1 + end },
+                rule: { condition: { type: 'BOOLEAN' } },
+              },
+            })
+            start = -1
+          }
+        })
+      }
+      else if (c.format) {
+        requests.push({
+          repeatCell: { range: column, cell: { userEnteredFormat: { numberFormat: NUMBER_FORMAT[c.format] } }, fields: 'userEnteredFormat.numberFormat' },
         })
       }
       requests.push({
@@ -181,32 +229,35 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
         },
       })
     })
+
     t.rows.forEach((r, ri) => {
-      const range = { sheetId, startRowIndex: ri + 1, endRowIndex: ri + 2 }
+      const range = { sheetId, startRowIndex: top + 1 + ri, endRowIndex: top + 2 + ri }
       if (r.bold) {
         requests.push({
           repeatCell: { range, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' },
         })
       }
-      if (r.fill) {
-        // シートと同じく、塗り始める列から右だけを塗る
-        const from = Math.max(r.fillFrom ? t.columns.findIndex(c => c.key === r.fillFrom) : 0, 0)
+      for (const f of r.fills ?? []) {
         requests.push({
           repeatCell: {
-            range: { ...range, startColumnIndex: from, endColumnIndex: t.columns.length },
-            cell: { userEnteredFormat: { backgroundColor: rgb(r.fill) } },
+            range: { ...range, startColumnIndex: f.from, endColumnIndex: f.to },
+            cell: { userEnteredFormat: { backgroundColor: rgb(f.color) } },
             fields: 'userEnteredFormat.backgroundColor',
           },
         })
       }
       if (r.topBorder) requests.push({ updateBorders: { range, top: { style: 'DOUBLE' } } })
     })
-    requests.push({ setBasicFilter: { filter: { range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: t.columns.length } } } })
+
+    // 元の予算シートと同じ形の表にはフィルタを付けない
+    if (!t.sheetStyle) {
+      requests.push({ setBasicFilter: { filter: { range: { ...all, startRowIndex: top } } } })
+    }
   }
   await sheetsApi(token, `${spreadsheetId}:batchUpdate`, { method: 'POST', body: { requests } })
 
   return {
     url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
-    sheets: plan.map(p => ({ name: p.name, rows: p.values.length - 1 })),
+    sheets: plan.map((p, i) => ({ name: p.name, rows: tables[i]!.rows.length })),
   }
 }

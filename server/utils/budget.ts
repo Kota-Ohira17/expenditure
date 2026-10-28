@@ -1,5 +1,6 @@
 /**
  * 本予算・補正予算スプレッドシートの「支出」シートの CSV を明細の配列にする（どちらの形でも読める）。
+ * 決算シートを元のシートと同じ形で出すため、シートの行そのもの（sheetRows）も返す。
  *
  * シートは 局 → 担当 → 款(out-03-02) → 項(out-03-02-06) → 目 → 節 の階層を行で表していて、
  * 「希望予算額」が入っている行が執行対象の明細。上の行の 款・項・目・節 を引き継いで名前を作る。
@@ -26,7 +27,7 @@ const COLUMNS = {
 type ColumnKey = keyof typeof COLUMNS
 
 /** 見出しの比較用（空白・改行を消し、全角英数を半角に） */
-const normalizeHeader = (s: string) => s.normalize('NFKC').replace(/\s+/g, '')
+export const normalizeHeader = (s: string) => s.normalize('NFKC').replace(/\s+/g, '')
 
 /** 見出し行での各列の位置（見つからなければ -1） */
 function columnIndexes(header: string[]) {
@@ -72,7 +73,7 @@ export interface ParsedBudgetLine {
 /** 金額。Shift_JIS の CSV では ¥ が \ になるので、それも円記号として扱う */
 const MONEY = /^-?[¥￥\\]?-?[\d,]+$/
 
-function parseMoney(value: string) {
+export function parseMoney(value: string) {
   const v = value.replace(/\s/g, '')
   if (!v || !MONEY.test(v) || !/\d/.test(v)) return null
   const n = Number(v.replace(/[¥￥\\,]/g, ''))
@@ -81,7 +82,15 @@ function parseMoney(value: string) {
 
 export type BudgetKind = '本予算' | '補正予算'
 
-export function parseBudgetCsv(text: string): ParsedBudgetLine[] {
+/** 取り込んだシートの行（決算シートを元のシートと同じ形で出すために、そのまま持つ） */
+export interface ParsedSheetRow {
+  sortOrder: number
+  role: 'preamble' | 'header' | 'row'
+  cells: string[]
+  lineKey: string | null
+}
+
+export function parseBudgetCsv(text: string): { lines: ParsedBudgetLine[], sheetRows: ParsedSheetRow[] } {
   const rows = parseCsv(text)
   const headerIndex = rows.findIndex((r) => {
     const c = columnIndexes(r)
@@ -103,8 +112,17 @@ export function parseBudgetCsv(text: string): ParsedBudgetLine[] {
   const vendors = { kan: '', kou: '', moku: '', setsu: '' }
   const lines: ParsedBudgetLine[] = []
   const seen = new Map<string, number>()
+  // 見出しより上・見出しの行も、元のシートと同じ形で出すために持っておく
+  const sheetRows: ParsedSheetRow[] = rows.slice(0, headerIndex + 1).map((cells, i) => ({
+    sortOrder: i,
+    role: i === headerIndex ? 'header' : 'preamble',
+    cells,
+    lineKey: null,
+  }))
 
   for (const row of rows.slice(headerIndex + 1)) {
+    const sheetRow: ParsedSheetRow = { sortOrder: sheetRows.length, role: 'row', cells: row, lineKey: null }
+    sheetRows.push(sheetRow)
     const number = get(row, 'number')
     const bureau = get(row, 'bureau')
     const team = get(row, 'team')
@@ -148,6 +166,7 @@ export function parseBudgetCsv(text: string): ParsedBudgetLine[] {
     const dup = seen.get(key) ?? 0
     seen.set(key, dup + 1)
     if (dup) key += `#${dup + 1}`
+    sheetRow.lineKey = key
 
     lines.push({
       key,
@@ -188,7 +207,9 @@ export function parseBudgetCsv(text: string): ParsedBudgetLine[] {
       if (!l.label.endsWith(`（${hint(l)}）`)) l.label += `（${hint(l)}）`
     }
   }
-  return lines
+  // 末尾の空の行は持たない
+  while (sheetRows.length && sheetRows.at(-1)!.role === 'row' && sheetRows.at(-1)!.cells.every(c => !c.trim())) sheetRows.pop()
+  return { lines, sheetRows }
 }
 
 /**
