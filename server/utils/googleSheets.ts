@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import type { Table } from './settlement'
+import type { CellValue, Table } from './settlement'
 
 /**
  * Google スプレッドシートへの書き出し。出力する人自身の Google アカウント（アプリに登録しているメールアドレス）で書き込む。
@@ -72,14 +72,29 @@ const rgb = (hex: string) => ({
   green: Number.parseInt(hex.slice(2, 4), 16) / 255,
   blue: Number.parseInt(hex.slice(4, 6), 16) / 255,
 })
+const RED = { red: 1, green: 0, blue: 0 }
 
-/** セルの値。リンクは HYPERLINK 関数、文字は数式として解釈されないよう先頭の = + - @ を無効化する */
-function cellValue(v: Table['rows'][number]['values'][string] | undefined): string | number | boolean {
+/**
+ * セルの値。リンクは HYPERLINK 関数、文字は数式として解釈されないよう先頭の = + - @ を無効化する。
+ * 複数のリンクはいったん名前を改行で並べて書き、あとで1つずつリンクを付ける（linkRuns）。
+ */
+function cellValue(v: CellValue | undefined): string | number | boolean {
   if (v == null) return ''
   if (typeof v === 'number' || typeof v === 'boolean') return v
   if (v instanceof Date) return v.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }).replaceAll('-', '/')
+  if (typeof v === 'object' && 'links' in v) return v.links.map(l => l.text).join('\n')
   if (typeof v === 'object') return `=HYPERLINK("${v.url.replaceAll('"', '""')}","${v.text.replaceAll('"', '""')}")`
   return /^[=+\-@]/.test(v) ? `'${v}` : v
+}
+
+/** 1つのセルに複数のリンク：名前ごとにリンクを付けた文字の書式 */
+function linkRuns(links: { text: string, url: string }[]) {
+  let at = 0
+  return links.map((l) => {
+    const run = { startIndex: at, format: { link: { uri: l.url } } }
+    at += l.text.length + 1
+    return run
+  })
 }
 
 /**
@@ -90,21 +105,22 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
   const plan = tables.map(t => ({
     name: t.name,
     values: [
-      ...(t.preamble ?? []),
+      ...(t.title ? [t.title] : []),
       t.columns.map(c => c.header),
       ...t.rows.map(r => t.columns.map(c => cellValue(r.values[c.key]))),
     ],
   }))
   if (dryRun) {
-    return { dryRun: true, sheets: plan.map(p => ({ name: p.name, rows: p.values.length, columns: Math.max(...p.values.map(v => v.length)), sample: p.values.slice(0, 3) })) }
+    return { dryRun: true, sheets: plan.map(p => ({ name: p.name, rows: p.values.length, columns: Math.max(...p.values.map(v => v.length)), sample: p.values.slice(0, 4) })) }
   }
 
   if (!token) throw needsGoogleAuth()
-  const meta = await sheetsApi<{ sheets: { properties: { sheetId: number, title: string }, basicFilter?: object }[] }>(
-    token, spreadsheetId, { query: { fields: 'sheets(properties(sheetId,title),basicFilter.range)' } },
+  const meta = await sheetsApi<{ sheets: { properties: { sheetId: number, title: string }, basicFilter?: object, merges?: object[] }[] }>(
+    token, spreadsheetId, { query: { fields: 'sheets(properties(sheetId,title),basicFilter.range,merges)' } },
   )
   const sheetIds = new Map(meta.sheets.map(s => [s.properties.title, s.properties.sheetId]))
   const hasFilter = new Set(meta.sheets.filter(s => s.basicFilter).map(s => s.properties.title))
+  const hasMerges = new Set(meta.sheets.filter(s => s.merges?.length).map(s => s.properties.title))
 
   // 足りないシートを追加
   const missing = tables.filter(t => !sheetIds.has(t.name))
@@ -116,7 +132,7 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
     for (const r of added.replies) sheetIds.set(r.addSheet.properties.title, r.addSheet.properties.sheetId)
   }
 
-  // 中身・書式・チェックボックス・フィルタを消して、行数・列数・固定する行をそろえる
+  // 中身・書式・入力規則・フィルタ・セルの結合を消して、行数・列数・固定する行をそろえる
   await sheetsApi(token, `${spreadsheetId}:batchUpdate`, {
     method: 'POST',
     body: {
@@ -124,12 +140,13 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
         const sheetId = sheetIds.get(t.name)!
         return [
           ...(hasFilter.has(t.name) ? [{ clearBasicFilter: { sheetId } }] : []),
-          { updateCells: { range: { sheetId }, fields: 'userEnteredValue,userEnteredFormat,dataValidation' } },
+          ...(hasMerges.has(t.name) ? [{ unmergeCells: { range: { sheetId } } }] : []),
+          { updateCells: { range: { sheetId }, fields: 'userEnteredValue,userEnteredFormat,dataValidation,textFormatRuns' } },
           {
             updateSheetProperties: {
               properties: {
                 sheetId,
-                gridProperties: { rowCount: plan[i]!.values.length + 5, columnCount: t.columns.length, frozenRowCount: (t.preamble?.length ?? 0) + 1 },
+                gridProperties: { rowCount: plan[i]!.values.length + 5, columnCount: t.columns.length, frozenRowCount: t.title ? 2 : 1 },
               },
               fields: 'gridProperties(rowCount,columnCount,frozenRowCount)',
             },
@@ -148,64 +165,46 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
     },
   })
 
-  // 書式（フォント・見出し・数値の形式・階層の色・チェックボックス・総計の線・列幅・フィルタ）
+  // 書式（フォント・タイトル・見出し・数値の形式・階層の色・複数のリンク・総計の線・列幅・フィルタ）
   const requests: object[] = []
   for (const t of tables) {
     const sheetId = sheetIds.get(t.name)!
-    const top = t.preamble?.length ?? 0
+    const top = t.title ? 1 : 0
     const rowCount = top + 1 + t.rows.length
     const all = { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: t.columns.length }
 
     if (t.sheetStyle) {
-      // 元の予算シートと同じ Arial 10。見出しより上の行（「支出の部」）は太字・12pt
+      // 決算シートと同じ Arial 9
       requests.push({
-        repeatCell: { range: all, cell: { userEnteredFormat: { textFormat: { fontFamily: 'Arial', fontSize: 10 } } }, fields: 'userEnteredFormat.textFormat(fontFamily,fontSize)' },
+        repeatCell: { range: all, cell: { userEnteredFormat: { textFormat: { fontFamily: 'Arial', fontSize: 9 } } }, fields: 'userEnteredFormat.textFormat(fontFamily,fontSize)' },
       })
-      if (top) {
-        requests.push({
-          repeatCell: {
-            range: { sheetId, startRowIndex: 0, endRowIndex: top },
-            cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 } } },
-            fields: 'userEnteredFormat.textFormat(bold,fontSize)',
-          },
-        })
-      }
+    }
+    if (t.title) {
+      // 「決算案｜支出」：赤の太字を赤の二重線で囲み、2つ目は2列分につなげる
+      const titleRange = { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 }
+      const line = { style: 'DOUBLE', color: RED }
+      requests.push(
+        { mergeCells: { range: { ...titleRange, startColumnIndex: 1 }, mergeType: 'MERGE_ALL' } },
+        { repeatCell: { range: titleRange, cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: RED } } }, fields: 'userEnteredFormat.textFormat(bold,foregroundColor)' } },
+        { updateBorders: { range: titleRange, top: line, bottom: line, left: line, right: line } },
+      )
     }
     requests.push({
       repeatCell: {
         range: { sheetId, startRowIndex: top, endRowIndex: top + 1, startColumnIndex: 0, endColumnIndex: t.columns.length },
-        cell: { userEnteredFormat: { textFormat: { bold: !t.sheetStyle }, backgroundColor: rgb(HEADER_FILL) } },
+        cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: rgb(t.sheetStyle ? SHEET_HEADER_FILL : HEADER_FILL) } },
         fields: 'userEnteredFormat(textFormat.bold,backgroundColor)',
       },
     })
 
     t.columns.forEach((c, ci) => {
-      const column = { sheetId, startRowIndex: top + 1, endRowIndex: rowCount, startColumnIndex: ci, endColumnIndex: ci + 1 }
-      if (c.format === 'check') {
+      if (c.format) {
         requests.push({
-          repeatCell: { range: column, cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.horizontalAlignment' },
-        })
-        // TRUE・FALSE の入ったセルだけをチェックボックスにする（続いている行はまとめる）
-        let start = -1
-        t.rows.forEach((r, ri) => {
-          const isBool = typeof r.values[c.key] === 'boolean'
-          if (isBool && start < 0) start = ri
-          const last = ri === t.rows.length - 1
-          if (start >= 0 && (!isBool || last)) {
-            const end = isBool ? ri + 1 : ri
-            requests.push({
-              setDataValidation: {
-                range: { ...column, startRowIndex: top + 1 + start, endRowIndex: top + 1 + end },
-                rule: { condition: { type: 'BOOLEAN' } },
-              },
-            })
-            start = -1
-          }
-        })
-      }
-      else if (c.format) {
-        requests.push({
-          repeatCell: { range: column, cell: { userEnteredFormat: { numberFormat: NUMBER_FORMAT[c.format] } }, fields: 'userEnteredFormat.numberFormat' },
+          repeatCell: {
+            range: { sheetId, startRowIndex: top + 1, endRowIndex: rowCount, startColumnIndex: ci, endColumnIndex: ci + 1 },
+            cell: { userEnteredFormat: { numberFormat: NUMBER_FORMAT[c.format] } },
+            fields: 'userEnteredFormat.numberFormat',
+          },
         })
       }
       requests.push({
@@ -218,7 +217,8 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
     })
 
     t.rows.forEach((r, ri) => {
-      const range = { sheetId, startRowIndex: top + 1 + ri, endRowIndex: top + 2 + ri }
+      const rowIndex = top + 1 + ri
+      const range = { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1 }
       if (r.bold) {
         requests.push({
           repeatCell: { range, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' },
@@ -234,9 +234,22 @@ export async function writeTablesToSpreadsheet(spreadsheetId: string, tables: Ta
         })
       }
       if (r.topBorder) requests.push({ updateBorders: { range, top: { style: 'DOUBLE' } } })
+      // 1つのセルに複数のリンク：名前ごとにリンクを付ける
+      t.columns.forEach((c, ci) => {
+        const v = r.values[c.key]
+        if (v && typeof v === 'object' && 'links' in v) {
+          requests.push({
+            updateCells: {
+              start: { sheetId, rowIndex, columnIndex: ci },
+              rows: [{ values: [{ userEnteredValue: { stringValue: cellValue(v) }, textFormatRuns: linkRuns(v.links) }] }],
+              fields: 'userEnteredValue,textFormatRuns',
+            },
+          })
+        }
+      })
     })
 
-    // 元の予算シートと同じ形の表にはフィルタを付けない
+    // 決算シートと同じ形の表にはフィルタを付けない
     if (!t.sheetStyle) {
       requests.push({ setBasicFilter: { filter: { range: { ...all, startRowIndex: top } } } })
     }
