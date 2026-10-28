@@ -1,0 +1,8 @@
+<!-- ブラウザのタブのアイコン。形は Feather Icons の dollar-sign（MIT License, https://feathericons.com）、色はアプリのアクセント色と文字色 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <rect width="24" height="24" rx="5" fill="#d2b4a6"/>
+  <g transform="translate(3 3) scale(.75)" fill="none" stroke="#2b2320" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="1" x2="12" y2="23"/>
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  </g>
+</svg>
