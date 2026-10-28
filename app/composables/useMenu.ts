@@ -4,8 +4,9 @@ export function useMenu() {
   return computed(() => [
     { to: '/', label: 'ホーム', icon: 'home' as const, home: false },
     { to: '/requests/new', label: '執行依頼', icon: 'send' as const, home: true },
+    { to: '/evidences/new', label: '証憑提出', icon: 'file-text' as const, home: true },
     { to: '/entries', label: '台帳', icon: 'list' as const, home: true },
-    ...(can('importBudget') ? [{ to: '/budget', label: '予算', icon: 'budget' as const, home: true }] : []),
+    ...(can('importBudget') ? [{ to: '/budget', label: '予算', icon: 'pie-chart' as const, home: true }] : []),
     ...(can('manageUsers') ? [{ to: '/users', label: 'ユーザー', icon: 'users' as const, home: true }] : []),
   ])
 }
