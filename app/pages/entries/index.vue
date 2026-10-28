@@ -35,6 +35,18 @@ const execErrors = ref<string[]>([])
 
 type Row = NonNullable<typeof entries.value>[number]
 
+/** 証憑が出ているか（執行依頼は台帳から付けた証憑、以前の証憑提出フォームの申請はその添付） */
+const hasEvidence = (row: Row) => (row.kind === 'execution' ? row.evidences.length > 0 : Boolean(row.attachmentId))
+/**
+ * 状態：執行待ち（ZAI の対応前）→ 証憑提出待ち（ZAI が執行した、証憑はまだ）→ 完了（証憑もそろった）。
+ * 証憑が先に出ていても、ZAI が対応するまでは「執行待ち」（立替の返金待ちなど）。
+ */
+const STAGE_LABELS = { pending: '執行待ち', done: '証憑提出待ち', complete: '完了' } as const
+const stageOf = (row: Row): keyof typeof STAGE_LABELS => (row.status !== 'done' ? 'pending' : hasEvidence(row) ? 'complete' : 'done')
+const evidenceStatus = (row: Row) => (row.kind === 'execution'
+  ? (row.evidences.length ? `${row.evidences.length}件` : '未提出')
+  : (row.attachmentId ? 'あり' : '未提出'))
+
 /** 形態の列。発注は通販サイトも出して、詳細を開かなくても分かるようにする */
 function methodLabel(row: Row) {
   if (row.type !== '発注' || !siteOf(row)) return row.paymentMethod ?? row.type
@@ -245,7 +257,7 @@ async function setDone(row: Row, done: boolean) {
         <thead>
           <tr>
             <th>番号</th><th>申請日</th><th>項目番号</th><th>支出項目</th><th>数量</th>
-            <th>金額</th><th>形態</th><th>期限・予定日</th><th>申請者</th><th>状態</th>
+            <th>金額</th><th>形態</th><th>期限・予定日</th><th>申請者</th><th>状態</th><th>証憑</th>
           </tr>
         </thead>
         <tbody>
@@ -261,11 +273,14 @@ async function setDone(row: Row, done: boolean) {
               <td data-label="期限・予定日">{{ row.deadline }}</td>
               <td data-label="申請者">{{ row.applicantName }}<small>（{{ row.department }}/{{ row.inCharge }}）</small></td>
               <td class="c-status">
-                <span class="badge" :class="row.status">{{ row.status === 'done' ? `対応済 ${dateTime(row.executedAt)}` : '未対応' }}</span>
+                <span class="badge" :class="stageOf(row)">{{ STAGE_LABELS[stageOf(row)] }}</span>
+                <small v-if="row.status === 'done'" class="executed-at">{{ dateTime(row.executedAt) }}</small>
               </td>
+              <td data-label="証憑" :class="{ 'no-evidence': !hasEvidence(row) }">{{ evidenceStatus(row) }}</td>
             </tr>
             <tr v-if="opened === row.id" class="detail">
-              <td colspan="10">
+              <td colspan="11">
+                <EvidenceSection v-if="row.kind === 'execution'" :entry="row" @changed="refresh" />
                 <ShippingNotice
                   v-if="row.type === '発注' && row.status === 'pending'"
                   class="shipping-in-row"
@@ -338,7 +353,7 @@ async function setDone(row: Row, done: boolean) {
                   </template>
                   <template v-if="row.remark"><dt>備考</dt><dd>{{ row.remark }}</dd></template>
                   <template v-if="row.attachmentId">
-                    <dt>添付</dt>
+                    <dt>{{ row.kind === 'execution' ? '請求書' : '証憑' }}</dt>
                     <dd><a :href="`/api/entries/${row.id}/attachment`" target="_blank">ファイルを開く</a></dd>
                   </template>
                 </dl>
@@ -383,6 +398,7 @@ async function setDone(row: Row, done: boolean) {
 .ok { color: var(--done); font-size: .85rem; }
 .bank-pick { display: flex; align-items: end; gap: .6rem; }
 .bank-link { white-space: nowrap; padding-bottom: .5rem; }
+td.no-evidence { color: var(--danger); font-weight: 600; }
 .site-tabs { align-items: center; margin-top: -.4rem; }
 .site-tabs-label { font-size: .85rem; color: var(--muted); }
 .site-tabs button { font-size: .85rem; padding: .2rem .7rem; }

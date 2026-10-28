@@ -32,7 +32,7 @@ export async function readPayloadAndFile(event: H3Event) {
 
 /** 添付ファイルを DB に保存し、ID を返す。ファイル名は旧GASと同じく「担当 項目名 種類」にする */
 export async function saveAttachment(file: Part, label: string) {
-  const safeLabel = label.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 80)
+  const safeLabel = label.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 120)
   const [row] = await useDb()
     .insert(schema.attachments)
     .values({

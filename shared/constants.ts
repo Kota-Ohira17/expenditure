@@ -75,6 +75,9 @@ export const ACCOUNT_TYPES = ['普通', '当座'] as const
 export const ONLINE_SITES = ['ASKUL', 'モノタロウ', 'Amazon', '楽天', 'アースダンボール'] as const
 export const DELIVERY_PLACES = ['駒場（A103）', '本郷（6号）'] as const
 export const PAPER_RECEIPT = ['有り', '無し'] as const
+/** 台帳から付ける証憑の種類と、立替の返金時期 */
+export const EVIDENCE_KINDS = ['領収書', 'レシート', '見積書', 'その他'] as const
+export const REFUND_TIMINGS = ['委員返金と同時', 'できる限り早く'] as const
 
 export const TRANSFER_BANKS = ['SMBC', 'ゆうちょ'] as const
 
@@ -85,7 +88,8 @@ export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 export const VIEWS = {
   number: '番号順',
   deadline: '期限順',
-  pending: '未対応',
+  pending: '執行待ち',
+  noEvidence: '証憑未提出',
   振込: '振込',
   発注: '発注',
   立替: '立替',
