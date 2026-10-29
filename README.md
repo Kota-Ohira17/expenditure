@@ -115,7 +115,7 @@ Google OAuth を用意していない場合は `.env` で `NUXT_PUBLIC_DEV_LOGIN
 3. デプロイ。ビルド時に `drizzle-kit migrate` が Turso にテーブルを作る（`vercel.json` → `npm run build:vercel`）
 
 ### テスト用ログインの注意
-合言葉を知っている人は、他人の ECC メールでも入れます（管理者として入るには管理者用の合言葉が別に必要）。
+合言葉を知っている人は、他人の ECC メールでも入れます。管理者用の合言葉で入ると、どのメールでも管理者になります（`NUXT_ADMIN_EMAILS` のメールは管理者用の合言葉でしか入れません）。
 本人確認が必要な運用に入る前に、Google ログインか委員会のログイン制度に切り替えてください。
 
 ### Slack 通知（n8n）

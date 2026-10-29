@@ -36,7 +36,7 @@ async function login() {
 
     <form v-if="testLogin || devLogin" class="dev" :class="{ first: !googleLogin }" @submit.prevent="login">
       <h2>{{ testLogin ? 'テスト用ログイン' : '開発用ログイン' }}</h2>
-      <p v-if="testLogin" class="hint">ECCのメールアドレスと氏名、配られた合言葉を入力してください。初回は「一般」で登録されます。</p>
+      <p v-if="testLogin" class="hint">ECCのメールアドレスと氏名、配られた合言葉を入力してください。初回は「一般」で登録されます（管理者用の合言葉なら管理者）。</p>
       <p v-else class="hint">パスワードは不要です。初回は「一般」で登録されます（NUXT_ADMIN_EMAILS に含まれるメールは管理者）。</p>
       <label>メール<input v-model.trim="form.email" type="email" placeholder="xxxx@g.ecc.u-tokyo.ac.jp" autocomplete="email" required></label>
       <label>氏名<input v-model.trim="form.name" placeholder="駒場太郎" autocomplete="name" required></label>
