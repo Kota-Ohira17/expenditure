@@ -74,6 +74,11 @@ h1 { font-size: 1.5rem; font-weight: 500; margin: 0 0 1rem; }
 }
 .side-link:hover { background: var(--accent-bg); }
 .side-link.active { background: var(--accent-bg); font-weight: 700; }
+/* メニューの枠の見出し（執行・予算・管理） */
+.side-group { padding: .7rem .75rem .2rem; color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .05em; }
+.side-group:first-of-type { padding-top: .3rem; }
+.group + .group { margin-top: 1.4rem; }
+.group-name { margin: 0 0 .6rem; color: var(--muted); font-size: .9rem; font-weight: 600; }
 .content {
   min-width: 0; padding: 2rem 2.25rem; min-height: calc(100vh - 6rem);
   background: var(--panel); border-radius: 14px; box-shadow: var(--shadow);
@@ -86,6 +91,7 @@ h1 { font-size: 1.5rem; font-weight: 500; margin: 0 0 1rem; }
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; display: flex; overflow-x: auto; padding: .4rem; }
   .side-link { white-space: nowrap; padding: .45rem .7rem; }
+  .side-group { align-self: center; padding: 0 .2rem 0 .6rem; white-space: nowrap; }
   .app { padding: 0 .5rem .5rem; }
   .topbar { padding: .6rem 1rem; margin-bottom: .5rem; }
   .layout { gap: .5rem; }

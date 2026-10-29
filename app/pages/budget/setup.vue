@@ -66,9 +66,9 @@ const bureauList = useId()
 
 <template>
   <section>
-    <p><NuxtLink to="/budget">← 予算に戻る</NuxtLink></p>
+    <p><NuxtLink to="/budget/collect">← 集約に戻る</NuxtLink></p>
     <h1>局・担当と入力する人</h1>
-    <p v-if="!collecting" class="card">集約中の予算がありません。「予算」の画面で集約を始めてから設定してください。</p>
+    <p v-if="!collecting" class="card">集約中の予算がありません。「集約」の画面で集約を始めてから設定してください。</p>
     <template v-else>
       <p class="hint">
         担当ごとに、明細を入力する人を割り当ててください。割り当てられた人は、自分の担当の明細だけを直して提出できます。
