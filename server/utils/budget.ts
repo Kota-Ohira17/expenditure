@@ -90,8 +90,12 @@ export interface ParsedSheetRow {
   lineKey: string | null
 }
 
-export function parseBudgetCsv(text: string): { lines: ParsedBudgetLine[], sheetRows: ParsedSheetRow[] } {
-  const rows = parseCsv(text)
+export function parseBudgetCsv(text: string) {
+  return parseBudgetRows(parseCsv(text))
+}
+
+/** 「支出」シートの行（セルの文字列の配列）を明細にする。予算の集約を確定するときも、作った行をこれで読む */
+export function parseBudgetRows(rows: string[][]): { lines: ParsedBudgetLine[], sheetRows: ParsedSheetRow[] } {
   const headerIndex = rows.findIndex((r) => {
     const c = columnIndexes(r)
     return c.number >= 0 && c.amount >= 0

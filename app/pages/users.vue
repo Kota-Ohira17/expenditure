@@ -81,7 +81,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   viewBankAccount: '口座情報の閲覧',
   executeEntries: '対応済み操作・執行額の修正',
   exportSettlement: '決算シートの出力',
-  importBudget: '予算の取り込み',
+  reviewBudget: '予算の集約・査定・確定',
   manageUsers: '委員の登録・権限変更',
 }
 const formatDate = (d: string | Date | null) => (d ? new Date(d).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' }) : '未ログイン')
@@ -91,7 +91,7 @@ const formatDate = (d: string | Date | null) => (d ? new Date(d).toLocaleString(
   <section>
     <h1>ユーザーと権限</h1>
     <p class="hint">
-      全員がすべての申請を閲覧できます。財務局長と管理者はさらに、口座情報の閲覧・対応済み操作・決算シートの出力・予算の取り込み・この画面を使えます（できることは同じです）。
+      全員がすべての申請を閲覧できます。財務管理部は予算の集約・査定・確定ができます。財務局長と管理者はさらに、口座情報の閲覧・対応済み操作・決算シートの出力・この画面を使えます（できることは同じです）。
       委員をメールアドレスで先に登録しておくこともでき、登録していない人も初回ログインで「一般」として一覧に加わります。
     </p>
 

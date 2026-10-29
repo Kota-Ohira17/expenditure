@@ -136,3 +136,52 @@ export const notificationSettingsSchema = z.object({
   }
 })
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>
+
+/** 予算の集約を始める（財務管理部） */
+export const budgetRoundStartSchema = z.object({
+  kind: z.enum(['本予算', '補正予算'], { error: '本予算か補正予算かを選んでください。' }),
+  term: required('期（例：第100期）').pipe(z.string().max(30)),
+})
+
+/** 予算の明細（担当が入力する）。金額は負の数も入れられる（企画納入など） */
+export const budgetItemSchema = z.object({
+  kan: required('款').pipe(z.string().max(100)),
+  kou: z.string().trim().max(100).default(''),
+  moku: z.string().trim().max(100).default(''),
+  setsu: z.string().trim().max(100).default(''),
+  quantity: z.string().trim().max(100).default(''),
+  unitPrice: z.union([z.literal(''), z.null(), z.coerce.number({ error: '単価は数字で入力してください。' }).int('単価は整数で入力してください。')]).default(null)
+    .transform(v => (v === '' ? null : v)),
+  amount: z.coerce.number({ error: '金額を数字で入力してください。' }).int('金額は整数で入力してください。'),
+  vendor: z.string().trim().max(100).default(''),
+  spec: z.string().trim().max(500).default(''),
+  link: z.string().trim().max(1000).default(''),
+  plannedTiming: z.string().trim().max(100).default(''),
+  remark: z.string().trim().max(1000).default(''),
+  isNew: z.boolean().default(false),
+  preExecution: z.boolean().default(false),
+}).superRefine((v, ctx) => {
+  if (!v.kou && !v.moku && !v.setsu) ctx.addIssue({ code: 'custom', message: '項・目・節のどれかに名前を入れてください。', path: ['kou'] })
+})
+export type BudgetItemInput = z.input<typeof budgetItemSchema>
+
+/** 査定（財務管理部）：承認か、要修正（理由を書く） */
+export const budgetReviewSchema = z.object({
+  decision: z.enum(['approve', 'return']),
+  comment: z.string().trim().max(1000).default(''),
+}).superRefine((v, ctx) => {
+  if (v.decision === 'return' && !v.comment) ctx.addIssue({ code: 'custom', message: '要修正の理由を書いてください。', path: ['comment'] })
+})
+
+/** 局・担当を足す・直す（財務管理部） */
+export const budgetTeamSchema = z.object({
+  bureauNo: required('局の番号（例：out01）').pipe(z.string().max(20)),
+  bureau: required('局').pipe(z.string().max(30)),
+  team: required('担当').pipe(z.string().max(50)),
+  person: z.string().trim().max(50).default(''),
+})
+
+/** 担当に割り当てる人（メールアドレスの一覧） */
+export const budgetMembersSchema = z.object({
+  emails: z.array(z.string().trim().toLowerCase()).max(50).default([]),
+})
