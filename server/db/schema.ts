@@ -1,4 +1,4 @@
-import { blob, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { blob, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { PAYMENT_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
 
@@ -159,6 +159,83 @@ export const users = sqliteTable('users', {
   dmOnExecuted: integer('dm_on_executed', { mode: 'boolean' }).notNull().default(true),
   /** Slack に登録しているメール（本人が通知設定で入力する）。未入力の人は ECC のメールで Slack のユーザーを探す */
   slackEmail: text('slack_email').notNull().default(''),
+  /** 予算の集約で、この人が入力する担当（局名と担当名）。財務管理部が「予算の設定」で割り当てる。空なら未割り当て */
+  budgetBureau: text('budget_bureau').notNull().default(''),
+  budgetTeam: text('budget_team').notNull().default(''),
 })
 
 export type User = typeof users.$inferSelect
+
+/** 予算の集約の状態：各担当が入力・提出し、財務管理部が査定する（collecting）→ 確定（confirmed） */
+export const BUDGET_ROUND_STATUSES = ['collecting', 'confirmed'] as const
+/** 明細の査定の状態：未提出 → 査定待ち → 承認済み、または要修正（担当に戻る） */
+export const BUDGET_ITEM_STATUSES = ['draft', 'submitted', 'returned', 'approved'] as const
+
+/**
+ * 予算の集約の1回分（本予算・補正予算）。始めるときに、最新の確定した予算をまるごと写す。
+ * 確定すると、その明細が予算明細（budget_lines）になる。
+ */
+export const budgetRounds = sqliteTable('budget_rounds', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** 期（例: 第100期）。補正予算は本予算と同じ期 */
+  term: text('term').notNull(),
+  kind: text('kind', { enum: ['本予算', '補正予算'] }).notNull(),
+  status: text('status', { enum: BUDGET_ROUND_STATUSES }).notNull().default('collecting'),
+  /** 写したもとの集約（最初の予算は null） */
+  baseRoundId: integer('base_round_id'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  createdBy: text('created_by').notNull(),
+  confirmedAt: integer('confirmed_at', { mode: 'timestamp_ms' }),
+})
+
+/** 集約ごとの局・担当（担当者の名前つき）。並び順は予算の表の順 */
+export const budgetTeams = sqliteTable('budget_teams', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  roundId: integer('round_id').notNull().references(() => budgetRounds.id),
+  /** 局の番号（例: out01）。項目番号の頭になる */
+  bureauNo: text('bureau_no').notNull(),
+  bureau: text('bureau').notNull(),
+  team: text('team').notNull(),
+  /** 担当者（例: 室賀慎太郎） */
+  person: text('person').notNull().default(''),
+  sortOrder: real('sort_order').notNull(),
+})
+
+/** 集約中の予算の明細。担当が入力し、財務管理部が査定する */
+export const budgetItems = sqliteTable('budget_items', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  roundId: integer('round_id').notNull().references(() => budgetRounds.id),
+  teamId: integer('team_id').notNull().references(() => budgetTeams.id),
+  /** 確定したときの項目番号（写した明細はもとの番号。新しい明細は確定まで空） */
+  itemNumber: text('item_number').notNull().default(''),
+  kan: text('kan').notNull().default(''),
+  kou: text('kou').notNull().default(''),
+  moku: text('moku').notNull().default(''),
+  setsu: text('setsu').notNull().default(''),
+  quantity: text('quantity').notNull().default(''),
+  unitPrice: integer('unit_price'),
+  amount: integer('amount').notNull(),
+  vendor: text('vendor').notNull().default(''),
+  /** 仕様・詳細 */
+  spec: text('spec').notNull().default(''),
+  link: text('link').notNull().default(''),
+  plannedTiming: text('planned_timing').notNull().default(''),
+  remark: text('remark').notNull().default(''),
+  isNew: integer('is_new', { mode: 'boolean' }).notNull().default(false),
+  preExecution: integer('pre_execution', { mode: 'boolean' }).notNull().default(false),
+  sortOrder: real('sort_order').notNull(),
+  status: text('status', { enum: BUDGET_ITEM_STATUSES }).notNull().default('draft'),
+  /** 財務管理部からのコメント（要修正の理由など） */
+  reviewComment: text('review_comment').notNull().default(''),
+  /** 削除する（確定すると予算から消える）。写した明細を消すときに付ける */
+  deleted: integer('deleted', { mode: 'boolean' }).notNull().default(false),
+  /** 写したもとの明細と、その金額（差額を出すため）。新しい明細は null */
+  baseItemId: integer('base_item_id'),
+  baseAmount: integer('base_amount'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedBy: text('updated_by').notNull(),
+})
+
+export type BudgetRound = typeof budgetRounds.$inferSelect
+export type BudgetTeam = typeof budgetTeams.$inferSelect
+export type BudgetItem = typeof budgetItems.$inferSelect

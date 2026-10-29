@@ -1,0 +1,231 @@
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { assignItemNumbers, confirmSheetRows } from '../../shared/budgetCompile'
+import { can } from '../../shared/roles'
+import type { BudgetRound, BudgetTeam } from '../db/schema'
+import type { BudgetKind, ParsedBudgetLine, ParsedSheetRow } from './budget'
+import type { SessionUser } from './auth'
+
+/**
+ * 予算の集約（本予算・補正予算）。
+ * 始める → 最新の確定した予算を写す。各担当が直して提出 → 財務管理部が査定 → 全部承認したら確定。
+ * 確定すると「支出」シートの行を作り、取り込みと同じ読み方で予算明細（budget_lines）を入れ替える。
+ */
+
+const CHUNK = 100
+
+/** 予算明細と「支出」シートの行を入れ替える（確定したとき・最初の予算を取り込んだとき） */
+export async function replaceBudgetLines(lines: ParsedBudgetLine[], sheetRows: ParsedSheetRow[], budgetKind: BudgetKind) {
+  const db = useDb()
+  const importedAt = new Date()
+  await db.batch([
+    db.delete(schema.budgetLines),
+    db.delete(schema.budgetSheetRows),
+    ...Array.from({ length: Math.ceil(lines.length / CHUNK) }, (_, i) =>
+      db.insert(schema.budgetLines).values(lines.slice(i * CHUNK, (i + 1) * CHUNK).map(l => ({ ...l, importedAt, budgetKind }))),
+    ),
+    ...Array.from({ length: Math.ceil(sheetRows.length / CHUNK) }, (_, i) =>
+      db.insert(schema.budgetSheetRows).values(sheetRows.slice(i * CHUNK, (i + 1) * CHUNK)),
+    ),
+  ] as const)
+}
+
+/** 集約中の予算（なければ null）。一度に集約できるのは1つだけ */
+export async function collectingRound() {
+  return (await useDb().query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.status, 'collecting') })) ?? null
+}
+
+/** 最新の確定した予算（なければ null） */
+export async function latestConfirmedRound() {
+  return (await useDb().query.budgetRounds.findFirst({
+    where: eq(schema.budgetRounds.status, 'confirmed'),
+    orderBy: [desc(schema.budgetRounds.confirmedAt), desc(schema.budgetRounds.id)],
+  })) ?? null
+}
+
+/** 項目番号から局の番号（out01-04-12 → out01、out-03-02-06 → out-03） */
+const bureauNoOf = (itemNumber: string) => itemNumber.match(/^[a-z]+-?\d+/i)?.[0] ?? ''
+
+/**
+ * 集約の記録がまだなく、予算明細（以前に取り込んだもの）があれば、それを最初の確定した予算として記録する。
+ * これで「最新の確定した予算を写して始める」ができるようになる。
+ */
+export async function ensureInitialRound(user: SessionUser) {
+  const db = useDb()
+  if (await db.query.budgetRounds.findFirst()) return
+  const lines = await db.select().from(schema.budgetLines).orderBy(asc(schema.budgetLines.sortOrder))
+  if (!lines.length) return
+  const sheetRows = await db.select().from(schema.budgetSheetRows).orderBy(asc(schema.budgetSheetRows.sortOrder))
+  const extras = sheetExtras(sheetRows)
+  const now = new Date()
+
+  const [round] = await db.insert(schema.budgetRounds).values({
+    term: '最初の予算', kind: lines[0]!.budgetKind, status: 'confirmed', createdAt: now, createdBy: user.email, confirmedAt: now,
+  }).returning()
+
+  // 局・担当を、予算の並び順に1つずつ
+  const teamKeys: string[] = []
+  const teamValues: (typeof schema.budgetTeams.$inferInsert)[] = []
+  for (const l of lines) {
+    const key = `${l.bureau}|${l.team}`
+    if (teamKeys.includes(key)) continue
+    teamKeys.push(key)
+    teamValues.push({
+      roundId: round!.id, bureauNo: l.bureauNo || bureauNoOf(l.itemNumber), bureau: l.bureau, team: l.team,
+      person: extras.persons.get(l.team) ?? '', sortOrder: teamValues.length,
+    })
+  }
+  const teams = await db.insert(schema.budgetTeams).values(teamValues).returning()
+  const teamId = new Map(teams.map(t => [`${t.bureau}|${t.team}`, t.id]))
+
+  const items = lines.map((l, i) => {
+    const x = extras.items.get(l.key)
+    return {
+      roundId: round!.id, teamId: teamId.get(`${l.bureau}|${l.team}`)!, itemNumber: l.itemNumber,
+      kan: l.kan, kou: l.kou, moku: l.moku, setsu: l.setsu, quantity: l.quantity, unitPrice: x?.unitPrice ?? null,
+      amount: l.budgetAmount, vendor: l.vendor, spec: x?.spec ?? '', link: l.link, plannedTiming: l.plannedTiming, remark: l.remark,
+      isNew: x?.isNew ?? false, preExecution: x?.preExecution ?? false, sortOrder: i, status: 'approved' as const,
+      updatedAt: now, updatedBy: user.email,
+    }
+  })
+  for (let i = 0; i < items.length; i += CHUNK) await db.insert(schema.budgetItems).values(items.slice(i, i + CHUNK))
+}
+
+/** 取り込んだ「支出」シートの行から、予算明細には持っていない 担当者・仕様・単価・新規・予算前執行 を拾う */
+function sheetExtras(stored: { role: string, cells: string[], lineKey: string | null }[]) {
+  const header = stored.find(r => r.role === 'header')?.cells.map(normalizeHeader) ?? []
+  const col = (...names: string[]) => names.map(n => header.indexOf(n)).find(i => i >= 0) ?? -1
+  const c = { team: col('担当', '担当名'), person: col('担当者'), spec: col('仕様・詳細', '仕様等', '仕様'), unit: col('単価'), isNew: col('新規'), pre: col('予算前執行') }
+  const persons = new Map<string, string>()
+  const items = new Map<string, { spec: string, unitPrice: number | null, isNew: boolean, preExecution: boolean }>()
+  for (const r of stored.filter(r => r.role === 'row')) {
+    const at = (i: number) => (i >= 0 ? (r.cells[i] ?? '').trim() : '')
+    if (at(c.team) && at(c.person)) persons.set(at(c.team), at(c.person))
+    if (r.lineKey) items.set(r.lineKey, { spec: at(c.spec), unitPrice: parseMoney(at(c.unit)), isNew: at(c.isNew) === 'TRUE', preExecution: at(c.pre) === 'TRUE' })
+  }
+  return { persons, items }
+}
+
+/**
+ * 集約を始める：最新の確定した予算の局・担当と明細を写す。
+ * 本予算は全明細を担当が確かめて出し直す（未提出から）。補正予算は写した明細を承認済みのままにし、直したものだけ査定する。
+ */
+export async function startRound(kind: BudgetKind, term: string, user: SessionUser) {
+  const db = useDb()
+  if (await collectingRound()) throw createError({ statusCode: 409, message: '集約中の予算があります。確定するか取りやめてから始めてください。' })
+  await ensureInitialRound(user)
+  const base = await latestConfirmedRound()
+  if (!base) throw createError({ statusCode: 400, message: 'もとにする予算がありません。最初の予算を取り込んでください。' })
+
+  const now = new Date()
+  const [round] = await db.insert(schema.budgetRounds).values({ term, kind, status: 'collecting', baseRoundId: base.id, createdAt: now, createdBy: user.email }).returning()
+  const baseTeams = await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, base.id)).orderBy(asc(schema.budgetTeams.sortOrder))
+  const newTeams = baseTeams.length
+    ? await db.insert(schema.budgetTeams).values(baseTeams.map(({ id: _, ...t }) => ({ ...t, roundId: round!.id }))).returning()
+    : []
+  const teamMap = new Map(baseTeams.map((t, i) => [t.id, newTeams[i]!.id]))
+
+  const baseItems = await db.select().from(schema.budgetItems)
+    .where(and(eq(schema.budgetItems.roundId, base.id), eq(schema.budgetItems.deleted, false)))
+  const items = baseItems.map(({ id, ...b }) => ({
+    ...b,
+    roundId: round!.id,
+    teamId: teamMap.get(b.teamId)!,
+    // 本予算は番号を付け直すので、もとの番号は持たない
+    itemNumber: kind === '補正予算' ? b.itemNumber : '',
+    status: kind === '補正予算' ? 'approved' as const : 'draft' as const,
+    reviewComment: '',
+    baseItemId: id,
+    baseAmount: b.amount,
+    updatedAt: now,
+    updatedBy: user.email,
+  }))
+  for (let i = 0; i < items.length; i += CHUNK) await db.insert(schema.budgetItems).values(items.slice(i, i + CHUNK))
+  return round!
+}
+
+/** その担当の明細を入力できるか（その担当に割り当てられた人と、財務管理部・財務局長・管理者） */
+export async function canEditTeam(user: SessionUser, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+  if (can(user.role, 'reviewBudget')) return true
+  const me = await useDb().query.users.findFirst({ where: eq(schema.users.email, user.email) })
+  return !!me && me.budgetBureau === team.bureau && me.budgetTeam === team.team
+}
+
+/** 集約中の予算の担当を読む（なければ 404、確定済みなら 409） */
+export async function collectingTeamOr404(teamId: number) {
+  const team = await useDb().query.budgetTeams.findFirst({ where: eq(schema.budgetTeams.id, teamId) })
+  if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
+  const round = await useDb().query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, team.roundId) })
+  if (round?.status !== 'collecting') throw createError({ statusCode: 409, message: 'この予算は確定しているので、直せません。' })
+  return { team, round }
+}
+
+/** 確定する：全部承認済みなら番号を付け、「支出」シートの行から予算明細を作って入れ替える */
+export async function confirmRound(round: BudgetRound) {
+  const db = useDb()
+  const teams = await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id))
+  const items = await db.select().from(schema.budgetItems).where(eq(schema.budgetItems.roundId, round.id))
+  const waiting = items.filter(i => i.status !== 'approved')
+  if (waiting.length) {
+    throw createError({ statusCode: 400, message: `承認していない明細が${waiting.length}件あります。すべて承認してから確定してください。` })
+  }
+  const numbers = assignItemNumbers(teams, items, round.kind === '補正予算')
+  const { lines, sheetRows } = parseBudgetRows(confirmSheetRows(teams, items, numbers))
+  if (!lines.length) throw createError({ statusCode: 400, message: '明細がありません。' })
+
+  // 付けた番号を明細に残す（次に補正予算を写すとき、この番号を引き継ぐ）
+  const updates = items.filter(i => !i.deleted).map(i => db.update(schema.budgetItems).set({ itemNumber: numbers.get(i.id) ?? '' }).where(eq(schema.budgetItems.id, i.id)))
+  for (let i = 0; i < updates.length; i += CHUNK) {
+    const chunk = updates.slice(i, i + CHUNK)
+    await db.batch(chunk as [typeof chunk[number], ...typeof chunk])
+  }
+  await replaceBudgetLines(lines, sheetRows, round.kind)
+  await db.update(schema.budgetRounds).set({ status: 'confirmed', confirmedAt: new Date() }).where(eq(schema.budgetRounds.id, round.id))
+  return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0) }
+}
+
+/** 集約をやめる（集約中の明細と担当を消す。確定した予算は変わらない） */
+export async function cancelRound(round: BudgetRound) {
+  const db = useDb()
+  await db.batch([
+    db.delete(schema.budgetItems).where(eq(schema.budgetItems.roundId, round.id)),
+    db.delete(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)),
+    db.delete(schema.budgetRounds).where(eq(schema.budgetRounds.id, round.id)),
+  ])
+}
+
+/** 画面に渡す集約の中身（局・担当、明細、仮の項目番号、自分が入力できる担当） */
+export async function roundView(round: BudgetRound, user: SessionUser) {
+  const db = useDb()
+  const teams = await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)).orderBy(asc(schema.budgetTeams.sortOrder))
+  const items = await db.select().from(schema.budgetItems).where(eq(schema.budgetItems.roundId, round.id)).orderBy(asc(schema.budgetItems.sortOrder))
+  const numbers = round.status === 'confirmed'
+    ? new Map(items.map(i => [i.id, i.itemNumber]))
+    : assignItemNumbers(teams, items, round.kind === '補正予算')
+  const me = await db.query.users.findFirst({ where: eq(schema.users.email, user.email) })
+  const editable = teams.filter(t => can(user.role, 'reviewBudget') || (me?.budgetBureau === t.bureau && me?.budgetTeam === t.team)).map(t => t.id)
+  const members = teams.length
+    ? await db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
+      .from(schema.users).where(inArray(schema.users.budgetTeam, [...new Set(teams.map(t => t.team))]))
+    : []
+  return {
+    round,
+    teams: teams.map(t => ({ ...t, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
+    items: items.map(i => ({ ...i, number: numbers.get(i.id) ?? '' })),
+    editableTeamIds: editable,
+  }
+}
+
+/** 集約中の明細と、その担当を読む（なければ 404、確定済みなら 409） */
+export async function collectingItemOr404(itemId: number) {
+  const item = await useDb().query.budgetItems.findFirst({ where: eq(schema.budgetItems.id, itemId) })
+  if (!item) throw createError({ statusCode: 404, message: '明細が見つかりません。' })
+  return { item, ...(await collectingTeamOr404(item.teamId)) }
+}
+
+/** 担当が明細を直してよいか。査定待ちの間は直せない（財務管理部が査定するまで待つ） */
+export async function assertCanChangeItem(user: SessionUser, item: { status: string }, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+  if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の明細は直せません。' })
+  if (item.status === 'submitted' && !can(user.role, 'reviewBudget')) {
+    throw createError({ statusCode: 409, message: '査定待ちの明細は直せません。財務管理部の査定を待ってください。' })
+  }
+}

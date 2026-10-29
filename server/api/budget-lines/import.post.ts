@@ -1,18 +1,21 @@
 import type { BudgetKind } from '../../utils/budget'
 
 /**
- * 本予算または補正予算の「支出」シートの CSV を取り込み、予算明細を全件入れ替える（財務局長・管理者のみ）。
+ * 最初の予算の取り込み（財務管理部）。予算の集約は「最新の確定した予算を写して直す」ので、
+ * まだ予算が1つもないときだけ、もとにする予算（昨年の予算など）を「支出」シートの CSV から一度だけ入れる。
  * どちらの予算かは kind（main: 本予算 / revised: 補正予算）で必ず指定する。
- * 申請側は明細の内容をコピーして持っているので、入れ替えても過去の申請は変わらない。
  */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'importBudget')
+  const user = await requirePermission(event, 'reviewBudget')
+  const db = useDb()
+  if ((await db.query.budgetRounds.findFirst()) || (await db.query.budgetLines.findFirst())) {
+    throw createError({ statusCode: 409, message: '予算はもう入っています。これからの予算は「予算の集約」で作ってください。' })
+  }
   const parts = (await readMultipartFormData(event)) ?? []
   const file = parts.find(p => p.name === 'file' && p.data.length > 0)
   if (!file) throw createError({ statusCode: 400, message: 'CSV ファイルを選んでください。' })
 
-  const text = decodeCsv(file.data)
-  const { lines, sheetRows } = parseBudgetCsv(text)
+  const { lines, sheetRows } = parseBudgetCsv(decodeCsv(file.data))
   const kindPart = parts.find(p => p.name === 'kind')?.data.toString()
   // 値は ASCII（main / revised）で受け取る（送信元の文字コードに左右されないように）
   const budgetKind: BudgetKind | null = kindPart === 'main' ? '本予算' : kindPart === 'revised' ? '補正予算' : null
@@ -21,25 +24,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '金額の入った明細が見つかりませんでした。「支出」シートの CSV か確認してください。' })
   }
 
-  const db = useDb()
-  const importedAt = new Date()
-  const CHUNK = 100
-  await db.batch([
-    db.delete(schema.budgetLines),
-    db.delete(schema.budgetSheetRows),
-    ...Array.from({ length: Math.ceil(lines.length / CHUNK) }, (_, i) =>
-      db.insert(schema.budgetLines).values(lines.slice(i * CHUNK, (i + 1) * CHUNK).map(l => ({ ...l, importedAt, budgetKind }))),
-    ),
-    // 決算シートを元のシートと同じ形で出すため、シートの行もそのまま入れ替える
-    ...Array.from({ length: Math.ceil(sheetRows.length / CHUNK) }, (_, i) =>
-      db.insert(schema.budgetSheetRows).values(sheetRows.slice(i * CHUNK, (i + 1) * CHUNK)),
-    ),
-  ] as const)
-
-  return {
-    count: lines.length,
-    total: lines.reduce((s, l) => s + l.budgetAmount, 0),
-    importedAt,
-    budgetKind,
-  }
+  await replaceBudgetLines(lines, sheetRows, budgetKind)
+  // 取り込んだ予算を、最初の確定した予算として記録する（集約はこれを写して始める）
+  await ensureInitialRound(user)
+  return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0), budgetKind }
 })

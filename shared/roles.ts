@@ -1,13 +1,15 @@
 /**
  * 権限（役割）と、それぞれができること。サーバー・画面の両方でこの表だけを見て判定する。
- * 全員がすべての申請を閲覧できる。財務局長と管理者はできることが同じで、名前（肩書き）だけが違う。それ以外は一般。
+ * 全員がすべての申請を閲覧できる。財務局長と管理者はできることが同じで、名前（肩書き）だけが違う。
+ * 財務管理部は予算の集約・査定だけができる。それ以外は一般。
  * 役割を足したり、できることを変えたりするときはここを直す。
  */
-export const ROLES = ['member', 'finance_chief', 'admin'] as const
+export const ROLES = ['member', 'budget_officer', 'finance_chief', 'admin'] as const
 export type Role = (typeof ROLES)[number]
 
 export const ROLE_LABELS: Record<Role, string> = {
   member: '一般',
+  budget_officer: '財務管理部',
   finance_chief: '財務局長',
   admin: '管理者',
 }
@@ -24,8 +26,8 @@ export const PERMISSIONS = {
   executeEntries: STAFF,
   /** 決算シートの出力（Excel・スプレッドシート） */
   exportSettlement: STAFF,
-  /** 予算 CSV の取り込み */
-  importBudget: STAFF,
+  /** 予算の集約を始める・査定する・確定する、局と担当を整える（最初の予算の取り込みも） */
+  reviewBudget: ['budget_officer', ...STAFF],
   /** 委員の登録・権限変更 */
   manageUsers: STAFF,
 } as const satisfies Record<string, readonly Role[]>
