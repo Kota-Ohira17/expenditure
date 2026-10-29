@@ -94,7 +94,7 @@ Google OAuth を用意していない場合は `.env` で `NUXT_PUBLIC_DEV_LOGIN
 
 ## Vercel + Turso へのデプロイ
 
-1. **Turso** でデータベースを作り、URL（`libsql://…`）とトークンを用意する
+1. **Turso** でデータベースを作り、URL（`libsql://…`）とトークンを用意する。Vercel のプロジェクトの「Storage」から Turso を追加してもよい（そのとき入る `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` もそのまま読むので、下の `NUXT_DATABASE_*` は要らない）
 2. **Vercel** で GitHub リポジトリをインポートし、環境変数を設定する
 
    | 変数 | 値 |

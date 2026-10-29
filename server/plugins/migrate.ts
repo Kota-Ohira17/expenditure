@@ -7,8 +7,8 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
  * 本番（Turso）はビルド時に `drizzle-kit migrate` で流す（package.json の build:vercel）。
  */
 export default defineNitroPlugin(async () => {
-  const { databaseUrl } = useRuntimeConfig()
-  if (!databaseUrl.startsWith('file:')) return
-  await mkdir(resolve(databaseUrl.slice('file:'.length), '..'), { recursive: true })
+  const { url } = databaseConfig()
+  if (!url.startsWith('file:')) return
+  await mkdir(resolve(url.slice('file:'.length), '..'), { recursive: true })
   await migrate(useDb(), { migrationsFolder: resolve(process.cwd(), 'server/db/migrations') })
 })
