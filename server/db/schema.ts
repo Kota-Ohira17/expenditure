@@ -125,14 +125,14 @@ export type BudgetLine = typeof budgetLines.$inferSelect
 export type EntryItem = typeof entryItems.$inferSelect
 
 /**
- * 申請に付けた証憑（領収書・レシートなど）。台帳から、申請者本人か財務局長・管理者が付ける。
+ * 申請に付けた証憑（領収書など）。台帳から、誰でもどの申請にも付けられる。
  * 1つの申請に複数付けられる（立替で領収書が何枚もある場合など）。
  */
 export const evidenceFiles = sqliteTable('evidence_files', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   entryId: integer('entry_id').notNull().references(() => entries.id),
   attachmentId: integer('attachment_id').notNull().references(() => attachments.id),
-  /** 領収書 / レシート / 見積書 / その他 */
+  /** 領収書 / 見積書 / その他（以前に付けたものには「レシート」もある） */
   kind: text('kind').notNull(),
   /** 証憑の金額・日付（立替なら立替金額・立替日）。分からなければ null */
   amount: integer('amount'),

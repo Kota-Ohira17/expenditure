@@ -37,10 +37,12 @@ const MAX_EDGE = 2000
 
 /**
  * スマホ写真はそのままだと 4MB を超えやすいので、長辺 2000px の JPEG に縮小する。
- * ブラウザが読めない形式（Chrome での HEIC など）はそのまま返す。
+ * HEIC・WebP はサーバーが受け付けないので、大きさにかかわらず JPEG にする。
+ * ブラウザが読めない形式（Chrome での HEIC など）はそのまま返す（サーバーで断られる）。
  */
 async function shrinkImage(file: File): Promise<File> {
-  if (!/^image\/(jpeg|png|webp|heic)$/.test(file.type) || file.size <= SHRINK_THRESHOLD) return file
+  const mustConvert = /^image\/(webp|heic)$/.test(file.type)
+  if (!mustConvert && (!/^image\/(jpeg|png)$/.test(file.type) || file.size <= SHRINK_THRESHOLD)) return file
   try {
     const bitmap = await createImageBitmap(file)
     const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
@@ -50,7 +52,7 @@ async function shrinkImage(file: File): Promise<File> {
     canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close()
     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
-    if (!blob || blob.size >= file.size) return file
+    if (!blob || (!mustConvert && blob.size >= file.size)) return file
     return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' })
   }
   catch {

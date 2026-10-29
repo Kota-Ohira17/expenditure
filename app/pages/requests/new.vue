@@ -195,7 +195,7 @@ async function onSubmit() {
       <fieldset v-if="methodGroup === '振込'">
         <legend>振込</legend>
         <p class="section-desc">ZAIが取引先の口座に直接振り込みます。</p>
-        <label>（ある場合は）請求書<input type="file" accept="application/pdf,image/*" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null"></label>
+        <label>（ある場合は）請求書<input type="file" accept="application/pdf,image/jpeg,image/png" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null"></label>
         <label><span>振込期限<span class="req">*</span></span><input v-model="form.transferDeadline" type="date" required></label>
         <ItemDetailsInputs
           v-if="hasItems"

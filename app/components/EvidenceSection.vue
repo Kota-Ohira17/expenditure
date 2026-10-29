@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 台帳で申請を開いたときの「証憑」欄。付けた証憑の一覧と、証憑を付けるフォーム。
- * 付けられるのは申請者本人と財務局長・管理者（発注は ZAI が証憑を受け取るので、財務局長・管理者が付ける）。
+ * 証憑は誰でも、どの申請にも付けられる。外せるのは付けた本人と財務局長・管理者。
  */
 import { EVIDENCE_KINDS, REFUND_TIMINGS } from '#shared/constants'
 
@@ -12,7 +12,6 @@ const props = defineProps<{
 const emit = defineEmits<{ changed: [] }>()
 
 const { user, can } = usePermissions()
-const canSubmit = computed(() => props.entry.applicantEmail === user.value?.email || can('executeEntries'))
 const canDelete = (e: Evidence) => e.uploadedBy === user.value?.email || can('executeEntries')
 const isAdvance = computed(() => props.entry.type === '立替')
 const refundTiming = computed(() => String((props.entry.details as { refundTiming?: string } | null)?.refundTiming ?? ''))
@@ -73,9 +72,9 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
     <p v-else class="hint missing">まだ証憑が提出されていません。</p>
     <p v-if="isAdvance && refundTiming" class="hint">返金時期の希望：{{ refundTiming }}</p>
 
-    <form v-if="canSubmit" class="upload" @submit.prevent="onUpload">
+    <form class="upload" @submit.prevent="onUpload">
       <span class="block-label">証憑を提出する</span>
-      <p class="hint">ファイルはPDF・画像のどちらかで、4MBまでにしてください。<br>立替以外の場合、執行日にはZAIが執行した日付が入力されています。</p>
+      <p class="hint">ファイルはPDF・JPEG・PNGのどれかで、4MBまでにしてください。<br>立替以外の場合、執行日にはZAIが執行した日付が入力されています。</p>
       <div class="fields">
         <label>種類
           <select v-model="form.kind" class="fit"><option v-for="k in EVIDENCE_KINDS" :key="k">{{ k }}</option></select>
@@ -87,7 +86,7 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
         </label>
       </div>
       <label><span>ファイル<span class="req">*</span></span>
-        <input ref="fileInput" type="file" accept="application/pdf,image/*" required @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null">
+        <input ref="fileInput" type="file" accept="application/pdf,image/jpeg,image/png" required @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null">
       </label>
       <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
       <p v-if="done" class="ok">証憑を提出しました。</p>

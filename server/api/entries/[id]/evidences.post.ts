@@ -2,7 +2,7 @@ import { count, eq } from 'drizzle-orm'
 import { evidenceUploadSchema } from '../../../../shared/schemas'
 
 /**
- * 台帳から申請に証憑を付ける（申請者本人か、財務局長・管理者）。
+ * 台帳から申請に証憑を付ける（ログインしている人なら誰でも、どの申請にも付けられる）。
  * ファイル名は「項目番号_担当名_支出項目名_月日（4桁）」に自動で付け直す。
  * 立替なら返金時期も申請に記録する。
  */
@@ -17,7 +17,6 @@ export default defineEventHandler(async (event) => {
   const entry = await db.query.entries.findFirst({ where: eq(schema.entries.id, id) })
   if (!entry || !canSeeEntry(user, entry)) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
   if (entry.kind !== 'execution') throw createError({ statusCode: 400, message: 'この申請には証憑を付けられません。' })
-  if (!canSubmitEvidence(user, entry)) throw createError({ statusCode: 403, message: '証憑を付けられるのは申請者本人と財務局長・管理者です。' })
 
   const amount = input.amount === '' ? null : input.amount
   // 日付が空なら、立替以外は執行日（ZAI が執行済み）、それもなければ今日
