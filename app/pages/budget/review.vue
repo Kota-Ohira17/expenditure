@@ -7,7 +7,8 @@ const { can } = usePermissions()
 if (!can('reviewBudget')) await navigateTo('/budget')
 const { data: view, refresh } = await useBudgetRound()
 
-const waiting = computed(() => view.value?.round.status === 'collecting' ? view.value.items.filter(i => i.status === 'submitted') : [])
+const collecting = computed(() => view.value?.round.status === 'collecting')
+const waiting = computed(() => collecting.value ? view.value!.items.filter(i => i.status === 'submitted') : [])
 const groups = computed(() => (view.value?.teams ?? [])
   .map(t => ({ team: t, list: waiting.value.filter(i => i.teamId === t.id) }))
   .filter(g => g.list.length))
@@ -44,7 +45,10 @@ async function approveAll(ids: number[]) {
       承認すると、その明細は確定を待つだけになります。直してほしいときは理由を書いて「要修正で戻す」を押すと、担当の画面に理由が出ます。
       担当が直して提出し直すと、またここに並びます。
     </p>
-    <p v-if="!waiting.length" class="card">査定待ちの明細はありません。</p>
+    <p v-if="!collecting" class="card">
+      今は集約中の予算がありません。査定は、「<NuxtLink to="/budget">予算</NuxtLink>」の画面で本予算か補正予算の集約を始め、各担当が明細を提出すると使えます。
+    </p>
+    <p v-else-if="!waiting.length" class="card">査定待ちの明細はありません。担当が明細を提出すると、ここに並びます。</p>
 
     <div v-for="g in groups" :key="g.team.id" class="group">
       <div class="group-head">

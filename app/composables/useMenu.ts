@@ -6,6 +6,7 @@ export function useMenu() {
     { to: '/requests/new', label: '執行依頼', icon: 'send' as const, home: true },
     { to: '/entries', label: '台帳', icon: 'list' as const, home: true },
     { to: '/budget', label: '予算', icon: 'pie-chart' as const, home: true },
+    ...(can('reviewBudget') ? [{ to: '/budget/review', label: '査定', icon: 'check-square' as const, home: true }] : []),
     ...(can('manageUsers') ? [{ to: '/users', label: 'ユーザー', icon: 'users' as const, home: true }] : []),
   ])
 }

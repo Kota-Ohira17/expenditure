@@ -13,10 +13,18 @@ router.afterEach(() => {
 
 /** 左のメニュー（権限に応じて出し分ける）。ホームのカードも同じ一覧を使う */
 const menu = useMenu()
+const route = useRoute()
 
 async function logout() {
   await clear()
   await navigateTo('/login')
+}
+
+/** いま開いている画面のメニュー（下の画面も含む。ただし、もっと長く一致するメニューがあればそちら。例：/budget/review は「査定」） */
+function isActive(to: string) {
+  const path = route.path
+  const hits = menu.value.map(m => m.to).filter(t => (t === '/' ? path === '/' : path === t || path.startsWith(`${t}/`)))
+  return hits.length > 0 && to === hits.reduce((a, b) => (b.length > a.length ? b : a))
 }
 </script>
 
@@ -48,7 +56,7 @@ async function logout() {
           :key="m.to"
           :to="m.to"
           class="side-link"
-          :class="{ active: m.to === '/' ? $route.path === '/' : $route.path.startsWith(m.to) }"
+          :class="{ active: isActive(m.to) }"
         >
           <AppIcon :name="m.icon" />
           <span>{{ m.to === '/entries' ? entriesTitle : m.label }}</span>

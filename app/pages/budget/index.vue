@@ -131,7 +131,7 @@ const total = computed(() => lines.value.reduce((s, l) => s + l.budgetAmount, 0)
         <p>{{ lines.length }}件の明細（合計 {{ formatYen(total) }}）。執行依頼ではこの予算から選びます。</p>
         <form v-if="reviewer" class="start" @submit.prevent="startRound">
           <strong>次の予算の集約を始める</strong>
-          <p class="hint">この予算をまるごと写して始めます。各担当が直して提出し、財務管理部が査定して確定します。</p>
+          <p class="hint">この予算をまるごと写して始めます。各担当が直して提出し、財務管理部が「査定」の画面で査定して確定します（査定は集約を始めると使えます）。</p>
           <fieldset class="kind">
             <legend>予算の種類</legend>
             <label class="check"><input v-model="start.kind" type="radio" value="本予算" required> 本予算（新しい期）</label>
