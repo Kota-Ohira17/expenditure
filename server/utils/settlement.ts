@@ -297,7 +297,7 @@ function evidenceTable(settled: SettledLine[], origin: string): Table {
         return own.length ? own.map(ymd) : e.executedAt ? [ymd(e.executedAt)] : []
       }))]
       const methods = [...new Set(l.entries.map(e => e.paymentMethod ?? e.type).map(m => METHOD_LABELS[m] ?? m))]
-      // 領収書・レシートは「領収書」、それ以外（見積書・請求書など）は「その他証憑」
+      // 領収書（以前に付けた「レシート」も）は「領収書」、それ以外（見積書・請求書など）は「その他証憑」
       const receipts: Link[] = []
       const others: Link[] = []
       for (const e of l.entries) {

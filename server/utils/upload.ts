@@ -2,7 +2,8 @@ import { extname } from 'node:path'
 import type { H3Event } from 'h3'
 import { MAX_ATTACHMENT_BYTES } from '../../shared/constants'
 
-const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/webp']
+/** 添付できるのは PDF・JPEG・PNG だけ（HEIC・WebP は画面で JPEG にしてから送る） */
+const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 
 type Part = NonNullable<Awaited<ReturnType<typeof readMultipartFormData>>>[number]
 
@@ -24,7 +25,7 @@ export async function readPayloadAndFile(event: H3Event) {
       throw createError({ statusCode: 400, message: 'ファイルは4MB以下にしてください。' })
     }
     if (!file.type || !ALLOWED_TYPES.includes(file.type)) {
-      throw createError({ statusCode: 400, message: 'PDF または画像ファイルを添付してください。' })
+      throw createError({ statusCode: 400, message: 'PDF・JPEG・PNG のどれかを添付してください。' })
     }
   }
   return { payload, file }
