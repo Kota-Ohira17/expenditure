@@ -69,7 +69,7 @@ function addTo(kan: string) {
 
 <template>
   <section>
-    <p><NuxtLink to="/budget">← 予算に戻る</NuxtLink></p>
+    <p><NuxtLink to="/budget/collect">← 集約に戻る</NuxtLink></p>
     <template v-if="team && view">
       <h1>{{ team.bureau }} ／ {{ team.team }}</h1>
       <p class="hint">

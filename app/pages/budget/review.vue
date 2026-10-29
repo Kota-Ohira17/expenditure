@@ -39,14 +39,14 @@ async function approveAll(ids: number[]) {
 
 <template>
   <section>
-    <p><NuxtLink to="/budget">← 予算に戻る</NuxtLink></p>
+    <p><NuxtLink to="/budget/collect">← 集約に戻る</NuxtLink></p>
     <h1>査定</h1>
     <p class="hint">
       承認すると、その明細は確定を待つだけになります。直してほしいときは理由を書いて「要修正で戻す」を押すと、担当の画面に理由が出ます。
       担当が直して提出し直すと、またここに並びます。
     </p>
     <p v-if="!collecting" class="card">
-      今は集約中の予算がありません。査定は、「<NuxtLink to="/budget">予算</NuxtLink>」の画面で本予算か補正予算の集約を始め、各担当が明細を提出すると使えます。
+      今は集約中の予算がありません。査定は、「<NuxtLink to="/budget/collect">集約</NuxtLink>」の画面で本予算か補正予算の集約を始め、各担当が明細を提出すると使えます。
     </p>
     <p v-else-if="!waiting.length" class="card">査定待ちの明細はありません。担当が明細を提出すると、ここに並びます。</p>
 
