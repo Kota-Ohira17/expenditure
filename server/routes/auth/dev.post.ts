@@ -16,8 +16,9 @@ function sameCode(input: string, expected: string) {
 /**
  * 開発・テスト用のログイン。
  * - NUXT_PUBLIC_DEV_LOGIN=true: ローカル開発用。任意のメールで入れる
- * - NUXT_PUBLIC_TEST_LOGIN=true: テスト公開用。ECC メール＋合言葉（NUXT_TEST_LOGIN_CODE）が必要。
- *   NUXT_ADMIN_EMAILS の管理者として入るには、別の合言葉（NUXT_TEST_ADMIN_CODE）が必要
+ * - NUXT_PUBLIC_TEST_LOGIN=true: テスト公開用。ECC メール＋合言葉が必要。
+ *   - 管理者用の合言葉（NUXT_TEST_ADMIN_CODE）で入ると、どのメールでも管理者になる
+ *   - 一般用の合言葉（NUXT_TEST_LOGIN_CODE）では、今の権限のまま（初回は一般）。NUXT_ADMIN_EMAILS のメールは一般用では入れない
  * 両方 true のときはテスト公開用の制限がかかる。
  */
 export default defineEventHandler(async (event) => {
@@ -30,12 +31,15 @@ export default defineEventHandler(async (event) => {
     if (!isAllowedEmail(email)) {
       throw createError({ statusCode: 400, message: `@${useRuntimeConfig().allowedEmailDomain} のメールアドレスで入ってください。` })
     }
-    const expected = isBootstrapAdmin(email) ? testAdminCode : testLoginCode
     // 合言葉が未設定のまま公開されても、誰も入れないようにする
-    if (!expected || !sameCode(code, expected)) {
+    const asAdmin = !!testAdminCode && sameCode(code, testAdminCode)
+    const asMember = !!testLoginCode && sameCode(code, testLoginCode) && !isBootstrapAdmin(email)
+    if (!asAdmin && !asMember) {
       await new Promise(r => setTimeout(r, 1000)) // 総当たりを遅らせる
       throw createError({ statusCode: 401, message: '合言葉が違います。' })
     }
+    await loginAs(event, email, name, { admin: asAdmin })
+    return { ok: true }
   }
 
   await loginAs(event, email, name)

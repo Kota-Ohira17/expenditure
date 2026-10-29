@@ -26,10 +26,11 @@ function toSessionUser(u: User) {
  * ログインの入口はここだけ。どの認証方式（Google / 委員会のログイン / 開発用）でも、
  * 本人確認ができたらこれを呼ぶ。初回はユーザーを「一般」で作り、以降は名前と最終ログインを更新する。
  */
-export async function loginAs(event: H3Event, rawEmail: string, name: string) {
+export async function loginAs(event: H3Event, rawEmail: string, name: string, options: { admin?: boolean } = {}) {
   const email = rawEmail.trim().toLowerCase()
   const now = new Date()
-  const admin = isBootstrapAdmin(email)
+  // NUXT_ADMIN_EMAILS の人か、テスト公開で管理者用の合言葉を使った人は管理者にする
+  const admin = options.admin || isBootstrapAdmin(email)
   const [user] = await useDb()
     .insert(schema.users)
     .values({ email, name, role: admin ? 'admin' : 'member', createdAt: now, lastLoginAt: now })
