@@ -28,6 +28,9 @@ const kans = computed(() => {
   return [...groups].map(([kan, list]) => ({ kan, list, total: list.filter(i => !i.deleted).reduce((s, i) => s + i.amount, 0) }))
 })
 const kanNames = computed(() => kans.value.map(k => k.kan).filter(Boolean))
+/** 折りたたんだ款（見出しを押すと開け閉めできる） */
+const folded = reactive(new Set<string>())
+const toggle = (kan: string) => (folded.has(kan) ? folded.delete(kan) : folded.add(kan))
 const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
   || (phase.value === 'collecting' && i.status !== 'submitted')
   || (phase.value === 'reviewing' && (i.status === 'returned' || i.status === 'draft')))
@@ -106,13 +109,17 @@ function addTo(kan: string) {
         :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
       />
 
-      <div v-for="k in kans" :key="k.kan" class="kan">
+      <div v-for="k in kans" :key="k.kan" class="kan" :class="{ folded: folded.has(k.kan) }">
         <div class="kan-head">
-          <h2>{{ k.kan || '（款なし）' }}</h2>
+          <button class="fold" :aria-expanded="!folded.has(k.kan)" :aria-label="folded.has(k.kan) ? '開く' : '折りたたむ'" @click="toggle(k.kan)">
+            <AppIcon name="chevron-down" />
+          </button>
+          <h2 @click="toggle(k.kan)">{{ k.kan || '（款なし）' }}</h2>
+          <span class="muted">{{ k.list.length }}件</span>
           <span class="muted">{{ formatYen(k.total) }}</span>
           <button v-if="canAdd" class="link" @click="addTo(k.kan)">この款に追加</button>
         </div>
-        <div class="table-wrap">
+        <div v-show="!folded.has(k.kan)" class="table-wrap">
           <table class="items">
             <thead>
               <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>単価</th><th>金額</th><th>もとの予算から</th><th>取引先</th><th>状態</th><th /></tr>
@@ -163,8 +170,12 @@ function addTo(kan: string) {
 .head p { margin: 0; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
 .kan { margin: 1.4rem 0; }
-.kan-head { display: flex; align-items: baseline; gap: .8rem; }
-.kan-head h2 { font-size: 1.05rem; margin: 0 0 .4rem; }
+.kan-head { display: flex; align-items: center; gap: .8rem; margin-bottom: .4rem; }
+.kan-head h2 { font-size: 1.05rem; margin: 0; cursor: pointer; user-select: none; }
+.fold { display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--text); }
+.fold:hover:not(:disabled) { background: var(--accent-bg); }
+.fold :deep(.app-icon) { transition: transform .15s; }
+.kan.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
 .table-wrap { overflow-x: auto; }
 .items { border-collapse: collapse; width: 100%; min-width: 52rem; background: var(--surface); }
 .items th, .items td { padding: .4rem .55rem; border-bottom: 1px solid var(--border); text-align: left; font-size: .88rem; vertical-align: top; }

@@ -81,6 +81,17 @@ const PAGE = 20
 const limits = reactive<Record<number, number>>({})
 const limitOf = (teamId: number) => limits[teamId] ?? PAGE
 const showMore = (teamId: number) => { limits[teamId] = limitOf(teamId) + PAGE }
+/** 折りたたんだ担当（見出しの帯を押すと開け閉めできる） */
+const folded = reactive(new Set<number>())
+const toggle = (teamId: number) => (folded.has(teamId) ? folded.delete(teamId) : folded.add(teamId))
+const allFolded = computed(() => groups.value.length > 0 && groups.value.every(g => folded.has(g.team.id)))
+function toggleAll() {
+  const fold = !allFolded.value
+  for (const g of groups.value) {
+    if (fold) folded.add(g.team.id)
+    else folded.delete(g.team.id)
+  }
+}
 watch([filter, query, bureau, teamId, change, flag], () => {
   for (const k of Object.keys(limits)) delete limits[Number(k)]
 })
@@ -179,15 +190,24 @@ async function approveAll(ids: number[]) {
           </select>
         </div>
       </div>
+      <div v-if="groups.length > 1" class="fold-all">
+        <button class="link" @click="toggleAll">{{ allFolded ? 'すべて開く' : 'すべて折りたたむ' }}</button>
+      </div>
       <p v-if="!shown.length" class="hint">{{ filter === 'submitted' ? '査定待ちの明細はありません。担当が明細を提出すると、ここに並びます。' : '該当する明細はありません。' }}</p>
 
-      <section v-for="g in groups" :key="g.team.id" class="group">
-        <header class="group-head">
-          <div class="group-name">
+      <section v-for="g in groups" :key="g.team.id" class="group" :class="{ folded: folded.has(g.team.id) }">
+        <header class="group-head" @click.self="toggle(g.team.id)">
+          <button
+            class="fold" :aria-expanded="!folded.has(g.team.id)" :aria-label="folded.has(g.team.id) ? '開く' : '折りたたむ'"
+            @click="toggle(g.team.id)"
+          >
+            <AppIcon name="chevron-down" />
+          </button>
+          <div class="group-name" @click="toggle(g.team.id)">
             <span class="group-bureau">{{ g.team.bureau }}</span>
-            <h2><NuxtLink :to="`/budget/team/${g.team.id}`">{{ g.team.team }}</NuxtLink></h2>
+            <h2><NuxtLink :to="`/budget/team/${g.team.id}`" @click.stop>{{ g.team.team }}</NuxtLink></h2>
           </div>
-          <div class="group-stats">
+          <div class="group-stats" @click="toggle(g.team.id)">
             <span><strong>{{ g.list.length }}</strong>件</span>
             <span>合計 <strong>{{ formatYen(g.total) }}</strong></span>
           </div>
@@ -195,7 +215,7 @@ async function approveAll(ids: number[]) {
             まとめて承認（{{ g.list.length }}件）
           </button>
         </header>
-        <div class="card-list">
+        <div v-show="!folded.has(g.team.id)" class="card-list">
           <InfoCard
             v-for="i in g.visible" :key="i.id"
             :status="itemStatusLabel(i)" :tone="STATUS_TONE[i.status]"
@@ -221,7 +241,7 @@ async function approveAll(ids: number[]) {
             </template>
           </InfoCard>
         </div>
-        <div v-if="g.list.length > g.visible.length" class="more">
+        <div v-if="!folded.has(g.team.id) && g.list.length > g.visible.length" class="more">
           <span class="muted">{{ g.visible.length }} / {{ g.list.length }}件を表示</span>
           <button class="secondary" @click="showMore(g.team.id)">もっと見る（次の{{ Math.min(PAGE, g.list.length - g.visible.length) }}件）</button>
         </div>
@@ -252,6 +272,13 @@ async function approveAll(ids: number[]) {
 /* 担当ごとのまとまり：枠で囲み、見出しの帯に担当名・件数・合計 */
 .group { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow: hidden; }
 .group-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.2rem; padding: .7rem 1rem; background: var(--accent-bg); border-bottom: 1px solid var(--border); border-left: 5px solid var(--accent); }
+.group-head { cursor: pointer; user-select: none; }
+.group.folded .group-head { border-bottom: none; }
+.fold { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--text); }
+.fold:hover:not(:disabled) { background: var(--accent-bg-hover); }
+.fold :deep(.app-icon) { transition: transform .15s; }
+.group.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
+.fold-all { display: flex; justify-content: flex-end; margin-bottom: -.6rem; font-size: .85rem; }
 .group-name { display: grid; flex: 1 1 12rem; }
 .group-bureau { font-size: .78rem; color: var(--muted); }
 .group-head h2 { font-size: 1.1rem; margin: 0; }
