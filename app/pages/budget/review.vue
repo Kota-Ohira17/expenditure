@@ -73,7 +73,17 @@ async function createItem(value: BudgetItemInput) {
 }
 const groups = computed(() => (view.value?.teams ?? [])
   .map(t => ({ team: t, list: shown.value.filter(i => i.teamId === t.id) }))
-  .filter(g => g.list.length))
+  .filter(g => g.list.length)
+  .map(g => ({ ...g, total: g.list.filter(i => !i.deleted).reduce((s, i) => s + i.amount, 0), visible: g.list.slice(0, limitOf(g.team.id)) })))
+
+/** 担当ごとに、カードは20件ずつ出す（「もっと見る」で20件ずつ増やす）。検索や絞り込みを変えたら20件に戻す */
+const PAGE = 20
+const limits = reactive<Record<number, number>>({})
+const limitOf = (teamId: number) => limits[teamId] ?? PAGE
+const showMore = (teamId: number) => { limits[teamId] = limitOf(teamId) + PAGE }
+watch([filter, query, bureau, teamId, change, flag], () => {
+  for (const k of Object.keys(limits)) delete limits[Number(k)]
+})
 const STATUS_TONE = { draft: 'gray', submitted: 'yellow', returned: 'red', approved: 'green' } as const
 
 const comments = reactive<Record<number, string>>({})
@@ -171,15 +181,23 @@ async function approveAll(ids: number[]) {
       </div>
       <p v-if="!shown.length" class="hint">{{ filter === 'submitted' ? '査定待ちの明細はありません。担当が明細を提出すると、ここに並びます。' : '該当する明細はありません。' }}</p>
 
-      <div v-for="g in groups" :key="g.team.id" class="group">
-        <div class="group-head">
-          <h2>{{ g.team.bureau }} ／ <NuxtLink :to="`/budget/team/${g.team.id}`">{{ g.team.team }}</NuxtLink></h2>
-          <span class="muted">{{ g.list.length }}件</span>
-          <button v-if="filter === 'submitted'" class="secondary" :disabled="busy !== null" @click="approveAll(g.list.map(i => i.id))">まとめて承認</button>
-        </div>
+      <section v-for="g in groups" :key="g.team.id" class="group">
+        <header class="group-head">
+          <div class="group-name">
+            <span class="group-bureau">{{ g.team.bureau }}</span>
+            <h2><NuxtLink :to="`/budget/team/${g.team.id}`">{{ g.team.team }}</NuxtLink></h2>
+          </div>
+          <div class="group-stats">
+            <span><strong>{{ g.list.length }}</strong>件</span>
+            <span>合計 <strong>{{ formatYen(g.total) }}</strong></span>
+          </div>
+          <button v-if="filter === 'submitted'" class="secondary" :disabled="busy !== null" @click="approveAll(g.list.map(i => i.id))">
+            まとめて承認（{{ g.list.length }}件）
+          </button>
+        </header>
         <div class="card-list">
           <InfoCard
-            v-for="i in g.list" :key="i.id"
+            v-for="i in g.visible" :key="i.id"
             :status="itemStatusLabel(i)" :tone="STATUS_TONE[i.status]"
             :meta="`${i.number}　担当：${g.team.team}`"
             :title="`${i.kan} ／ ${itemName(i)}`"
@@ -203,7 +221,11 @@ async function approveAll(ids: number[]) {
             </template>
           </InfoCard>
         </div>
-      </div>
+        <div v-if="g.list.length > g.visible.length" class="more">
+          <span class="muted">{{ g.visible.length }} / {{ g.list.length }}件を表示</span>
+          <button class="secondary" @click="showMore(g.team.id)">もっと見る（次の{{ Math.min(PAGE, g.list.length - g.visible.length) }}件）</button>
+        </div>
+      </section>
     </template>
   </section>
 </template>
@@ -227,10 +249,17 @@ async function approveAll(ids: number[]) {
 .drops { display: flex; flex-wrap: wrap; gap: .2rem .4rem; }
 .drops select { width: auto; border: none; background: transparent; font-size: .85rem; padding: .25rem 1.4rem .25rem .4rem; max-width: 11rem; cursor: pointer; }
 .drops select:hover { background: var(--accent-bg); border-radius: 6px; }
-.group { margin: 1.4rem 0; }
-.group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .8rem; margin-bottom: .6rem; }
-.group-head .muted { white-space: nowrap; }
-.group-head h2 { font-size: 1.05rem; margin: 0; }
+/* 担当ごとのまとまり：枠で囲み、見出しの帯に担当名・件数・合計 */
+.group { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.group-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.2rem; padding: .7rem 1rem; background: var(--accent-bg); border-bottom: 1px solid var(--border); border-left: 5px solid var(--accent); }
+.group-name { display: grid; flex: 1 1 12rem; }
+.group-bureau { font-size: .78rem; color: var(--muted); }
+.group-head h2 { font-size: 1.1rem; margin: 0; }
+.group-head h2 a { color: inherit; }
+.group-stats { display: flex; gap: 1rem; font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.group-stats strong { color: var(--text); }
+.group .card-list { padding: .8rem; }
+.more { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .4rem 1rem; padding: 0 .8rem .9rem; font-size: .85rem; }
 .base { font-weight: 400; color: var(--muted); margin-left: .3rem; font-size: .85rem; }
 .sub { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: .2rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
