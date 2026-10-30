@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   await requirePermission(event, 'reviewBudget')
   const id = Number(getRouterParam(event, 'id'))
   const round = await useDb().query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, id) })
-  if (round?.status !== 'collecting') throw createError({ statusCode: 404, message: '集約中の予算が見つかりません。' })
+  if (!round || round.status === 'confirmed') throw createError({ statusCode: 404, message: '確定していない集約が見つかりません。' })
   await cancelRound(round)
   return { ok: true }
 })

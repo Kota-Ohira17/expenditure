@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm'
 import { assignItemNumbers, confirmSheetRows } from '../../shared/budgetCompile'
 import { can } from '../../shared/roles'
 import type { BudgetRound, BudgetTeam } from '../db/schema'
@@ -7,7 +7,7 @@ import type { SessionUser } from './auth'
 
 /**
  * 予算の集約（本予算・補正予算）。
- * 始める → 最新の確定した予算を写す。各担当が直して提出 → 財務管理部が査定 → 全部承認したら確定。
+ * 集約開始 → 最新の確定した予算を写す。各担当が直して提出 → 集約終了（入力の締め切り）→ 査定開始 → 全部承認したら確定。
  * 確定すると「支出」シートの行を作り、取り込みと同じ読み方で予算明細（budget_lines）を入れ替える。
  */
 
@@ -29,9 +29,21 @@ export async function replaceBudgetLines(lines: ParsedBudgetLine[], sheetRows: P
   ] as const)
 }
 
-/** 集約中の予算（なければ null）。一度に集約できるのは1つだけ */
-export async function collectingRound() {
-  return (await useDb().query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.status, 'collecting') })) ?? null
+/** 確定していない集約（集約中・集約終了・査定中。なければ null）。一度に進められるのは1つだけ */
+export async function openRound() {
+  return (await useDb().query.budgetRounds.findFirst({ where: ne(schema.budgetRounds.status, 'confirmed') })) ?? null
+}
+
+/** 集約の段階を確かめる（違えば 409 と、その段階でできることの案内） */
+export function assertPhase(round: Pick<BudgetRound, 'status'>, phase: BudgetRound['status']) {
+  if (round.status === phase) return
+  const messages: Record<BudgetRound['status'], string> = {
+    collecting: '集約中ではありません。',
+    closed: '集約終了の段階ではありません。',
+    reviewing: '査定中ではありません。「集約終了」のあと「査定開始」で査定できます。',
+    confirmed: 'この予算はまだ確定していません。',
+  }
+  throw createError({ statusCode: 409, message: messages[phase] })
 }
 
 /** 最新の確定した予算（なければ null） */
@@ -109,7 +121,7 @@ function sheetExtras(stored: { role: string, cells: string[], lineKey: string | 
  */
 export async function startRound(kind: BudgetKind, term: string, user: SessionUser) {
   const db = useDb()
-  if (await collectingRound()) throw createError({ statusCode: 409, message: '集約中の予算があります。確定するか取りやめてから始めてください。' })
+  if (await openRound()) throw createError({ statusCode: 409, message: '確定していない集約があります。確定するか取りやめてから始めてください。' })
   await ensureInitialRound(user)
   const base = await latestConfirmedRound()
   if (!base) throw createError({ statusCode: 400, message: 'もとにする予算がありません。最初の予算を取り込んでください。' })
@@ -148,12 +160,12 @@ export async function canEditTeam(user: SessionUser, team: Pick<BudgetTeam, 'bur
   return !!me && me.budgetBureau === team.bureau && me.budgetTeam === team.team
 }
 
-/** 集約中の予算の担当を読む（なければ 404、確定済みなら 409） */
-export async function collectingTeamOr404(teamId: number) {
+/** 確定していない集約の担当を読む（なければ 404、確定済みなら 409） */
+export async function openTeamOr404(teamId: number) {
   const team = await useDb().query.budgetTeams.findFirst({ where: eq(schema.budgetTeams.id, teamId) })
   if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
   const round = await useDb().query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, team.roundId) })
-  if (round?.status !== 'collecting') throw createError({ statusCode: 409, message: 'この予算は確定しているので、直せません。' })
+  if (!round || round.status === 'confirmed') throw createError({ statusCode: 409, message: 'この予算は確定しているので、直せません。' })
   return { team, round }
 }
 
@@ -205,30 +217,42 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
     ? await db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
       .from(schema.users).where(inArray(schema.users.budgetTeam, [...new Set(teams.map(t => t.team))]))
     : []
-  // 最後に直した人の名前（画面の右の欄に出す）
-  const editors = [...new Set(items.map(i => i.updatedBy))]
-  const names = new Map(editors.length
-    ? (await db.select({ email: schema.users.email, name: schema.users.name }).from(schema.users).where(inArray(schema.users.email, editors))).map(u => [u.email, u.name])
-    : [])
   return {
     round,
     teams: teams.map(t => ({ ...t, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
-    items: items.map(i => ({ ...i, number: numbers.get(i.id) ?? '', updatedByName: names.get(i.updatedBy) ?? i.updatedBy })),
+    items: items.map(i => ({ ...i, number: numbers.get(i.id) ?? '' })),
     editableTeamIds: editable,
   }
 }
 
-/** 集約中の明細と、その担当を読む（なければ 404、確定済みなら 409） */
-export async function collectingItemOr404(itemId: number) {
+/** 確定していない集約の明細と、その担当を読む（なければ 404、確定済みなら 409） */
+export async function openItemOr404(itemId: number) {
   const item = await useDb().query.budgetItems.findFirst({ where: eq(schema.budgetItems.id, itemId) })
   if (!item) throw createError({ statusCode: 404, message: '明細が見つかりません。' })
-  return { item, ...(await collectingTeamOr404(item.teamId)) }
+  return { item, ...(await openTeamOr404(item.teamId)) }
 }
 
-/** 担当が明細を直してよいか。査定待ちの間は直せない（財務管理部が査定するまで待つ） */
-export async function assertCanChangeItem(user: SessionUser, item: { status: string }, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+/**
+ * 担当が明細を直してよいか。財務管理部は確定までいつでも直せる。担当の人は
+ * - 集約中：査定待ち以外の明細
+ * - 査定中：要修正の明細（直して未提出に戻ったものも）だけ
+ * - 集約終了：直せない
+ */
+export async function assertCanChangeItem(user: SessionUser, item: { status: string }, team: Pick<BudgetTeam, 'bureau' | 'team'>, round: Pick<BudgetRound, 'status'>) {
   if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の明細は直せません。' })
-  if (item.status === 'submitted' && !can(user.role, 'reviewBudget')) {
-    throw createError({ statusCode: 409, message: '査定待ちの明細は直せません。財務管理部の査定を待ってください。' })
-  }
+  if (can(user.role, 'reviewBudget')) return
+  if (round.status === 'collecting' && item.status !== 'submitted') return
+  if (round.status === 'reviewing' && (item.status === 'returned' || item.status === 'draft')) return
+  const message = round.status === 'collecting'
+    ? '提出した明細は直せません。財務管理部の査定を待ってください。'
+    : round.status === 'closed'
+      ? '集約は終了しました。査定が始まると、要修正になった明細だけ直せます。'
+      : '査定中は、要修正になった明細だけ直せます。'
+  throw createError({ statusCode: 409, message })
+}
+
+/** 担当の人が明細を足してよいか（集約中だけ。財務管理部は確定までいつでも） */
+export function assertCanAddItem(user: SessionUser, round: Pick<BudgetRound, 'status'>) {
+  if (can(user.role, 'reviewBudget') || round.status === 'collecting') return
+  throw createError({ statusCode: 409, message: '集約は終了したので、明細は足せません。' })
 }

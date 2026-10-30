@@ -4,8 +4,8 @@ import { budgetTeamSchema } from '../../../../shared/schemas'
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'reviewBudget')
   const body = parseOr400(budgetTeamSchema.safeParse(await readBody(event)))
-  const round = await collectingRound()
-  if (!round) throw createError({ statusCode: 409, message: '集約中の予算がありません。' })
+  const round = await openRound()
+  if (!round) throw createError({ statusCode: 409, message: '確定していない集約がありません。' })
   const db = useDb()
   const teams = await db.query.budgetTeams.findMany({ where: (t, { eq }) => eq(t.roundId, round.id) })
   if (teams.some(t => t.bureau === body.bureau && t.team === body.team)) {

@@ -10,7 +10,7 @@ defineProps<{
   tone?: 'gray' | 'yellow' | 'red' | 'green'
   meta?: string
   title: string
-  /** 右の欄：だれが・いつ */
+  /** 右の欄：だれが（省略可）・いつ */
   who?: string
   when?: string | Date | null
   /** 右の欄のひとこと（備考・コメントなど） */
@@ -36,8 +36,8 @@ const formatWhen = (d: string | Date | null | undefined) =>
           <p class="title">{{ title }}</p>
           <p class="point"><slot /></p>
         </div>
-        <aside v-if="who || note" class="aside">
-          <p class="who"><strong>{{ who }}</strong> <span>{{ formatWhen(when) }}</span></p>
+        <aside v-if="who || when || note" class="aside">
+          <p class="who"><strong v-if="who">{{ who }}</strong> <span>{{ formatWhen(when) }}</span></p>
           <p v-if="note" class="note">{{ note }}</p>
         </aside>
       </div>

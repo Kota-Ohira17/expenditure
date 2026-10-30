@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
  * 担当の予算の明細。その担当の人（と財務管理部）は、明細を直す・足す・消すことができ、終わったら提出する。
+ * 担当の人が直せるのは、集約中は査定待ち以外、査定中は要修正の明細だけ。集約終了のあとは直せない（財務管理部は確定までいつでも）。
  * 写してきた明細を消すと「削除」の印が付き、査定で承認されると確定したときに予算から消える。
  * ほかの人は見るだけ。
  */
@@ -11,8 +12,13 @@ const teamId = Number(route.params.id)
 const { data: view, refresh } = await useBudgetRound()
 
 const team = computed(() => view.value?.teams.find(t => t.id === teamId))
-const collecting = computed(() => view.value?.round.status === 'collecting')
-const editable = computed(() => collecting.value && !!view.value?.editableTeamIds.includes(teamId))
+const { can } = usePermissions()
+const reviewer = computed(() => can('reviewBudget'))
+const phase = computed(() => view.value?.round.status ?? 'confirmed')
+const open = computed(() => phase.value !== 'confirmed')
+const editable = computed(() => open.value && !!view.value?.editableTeamIds.includes(teamId))
+/** 明細を足せるか（担当の人は集約中だけ） */
+const canAdd = computed(() => editable.value && (reviewer.value || phase.value === 'collecting'))
 const items = computed(() => view.value?.items.filter(i => i.teamId === teamId) ?? [])
 const summary = computed(() => teamSummary(items.value))
 /** 款ごとにまとめる（並びは予算の表の順） */
@@ -22,8 +28,11 @@ const kans = computed(() => {
   return [...groups].map(([kan, list]) => ({ kan, list, total: list.filter(i => !i.deleted).reduce((s, i) => s + i.amount, 0) }))
 })
 const kanNames = computed(() => kans.value.map(k => k.kan).filter(Boolean))
-const canChange = (i: BudgetItemView) => editable.value && i.status !== 'submitted'
-const toSubmit = computed(() => summary.value.draft + summary.value.returned)
+const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
+  || (phase.value === 'collecting' && i.status !== 'submitted')
+  || (phase.value === 'reviewing' && (i.status === 'returned' || i.status === 'draft')))
+/** 提出できる件数（未提出・要修正。集約終了の間は0） */
+const toSubmit = computed(() => (phase.value === 'closed' ? 0 : summary.value.draft + summary.value.returned))
 
 const editing = ref<number | 'new' | null>(null)
 const newKan = ref('')
@@ -73,7 +82,7 @@ function addTo(kan: string) {
     <template v-if="team && view">
       <h1>{{ team.bureau }} ／ {{ team.team }}</h1>
       <p class="hint">
-        {{ view.round.term }} {{ view.round.kind }}{{ collecting ? '（集約中）' : '（確定）' }}・入力する人
+        {{ view.round.term }} {{ view.round.kind }}（{{ PHASE_LABELS[phase] }}）・入力する人
         {{ team.members.map(m => m.name).join('、') || '未割り当て' }}
       </p>
 
@@ -84,11 +93,13 @@ function addTo(kan: string) {
         </p>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
         <p v-if="message" class="ok">{{ message }}</p>
-        <div v-if="editable" class="buttons">
-          <button :disabled="pending || !toSubmit" @click="submit">提出（{{ toSubmit }}件）</button>
-          <button class="secondary" :disabled="pending" @click="addTo('')">明細の追加</button>
+        <div v-if="editable && (toSubmit || canAdd)" class="buttons">
+          <button v-if="phase !== 'closed'" :disabled="pending || !toSubmit" @click="submit">提出（{{ toSubmit }}件）</button>
+          <button v-if="canAdd" class="secondary" :disabled="pending" @click="addTo('')">明細の追加</button>
         </div>
-        <p v-else-if="collecting" class="hint">この担当の明細は見るだけです（入力できるのは、この担当に割り当てられた人と財務管理部です）。</p>
+        <p v-if="editable && !reviewer && phase === 'closed'" class="hint">集約は終了しました。査定が始まると、要修正になった明細だけ直して出し直せます。</p>
+        <p v-if="editable && !reviewer && phase === 'reviewing'" class="hint">査定中です。要修正になった明細だけ直して出し直せます。</p>
+        <p v-if="!editable && open" class="hint">この担当の明細は見るだけです（入力できるのは、この担当に割り当てられた人と財務管理部です）。</p>
       </div>
 
       <BudgetItemForm
@@ -100,7 +111,7 @@ function addTo(kan: string) {
         <div class="kan-head">
           <h2>{{ k.kan || '（款なし）' }}</h2>
           <span class="muted">{{ formatYen(k.total) }}</span>
-          <button v-if="editable" class="link" @click="addTo(k.kan)">この款に追加</button>
+          <button v-if="canAdd" class="link" @click="addTo(k.kan)">この款に追加</button>
         </div>
         <div class="table-wrap">
           <table class="items">

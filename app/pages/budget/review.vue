@@ -9,7 +9,9 @@ const { can } = usePermissions()
 if (!can('reviewBudget')) await navigateTo('/budget')
 const { data: view, refresh } = await useBudgetRound()
 
-const collecting = computed(() => view.value?.round.status === 'collecting')
+const phase = computed(() => view.value?.round.status ?? 'confirmed')
+const open = computed(() => phase.value !== 'confirmed')
+const collecting = computed(() => phase.value === 'reviewing')
 /** 表示する状態（査定待ち・要修正もの・承認済みのうち、もとの予算から変わったもの） */
 type Filter = 'submitted' | 'returned' | 'approved'
 const FILTERS = [
@@ -102,7 +104,7 @@ async function approveAll(ids: number[]) {
   <section>
     <div class="page-head">
       <h1>査定</h1>
-      <button v-if="collecting" class="primary" @click="creating = !creating; createDone = ''">
+      <button v-if="open" class="primary" @click="creating = !creating; createDone = ''">
         <AppIcon name="plus" /> 新規登録
       </button>
     </div>
@@ -125,7 +127,9 @@ async function approveAll(ids: number[]) {
       />
     </div>
     <p v-if="!collecting" class="card">
-      今は集約中の予算がありません。査定は、「<NuxtLink to="/budget/collect">集約</NuxtLink>」の画面で本予算か補正予算の集約を始め、各担当が明細を提出すると使えます。
+      {{ open
+        ? `今は「${PHASE_LABELS[phase]}」です。査定は「集約終了」のあと「査定開始」を押すと使えます（「集約」の画面から）。`
+        : '今は集約していません。「集約」の画面で集約開始 → 集約終了 → 査定開始の順に進めると、査定できます。' }}
     </p>
     <template v-else>
       <label class="search">
@@ -167,7 +171,7 @@ async function approveAll(ids: number[]) {
             :status="itemStatusLabel(i)" :tone="STATUS_TONE[i.status]"
             :meta="`${i.number}　担当：${g.team.team}`"
             :title="`${i.kan} ／ ${itemName(i)}`"
-            :who="i.updatedByName" :when="i.updatedAt" :note="i.reviewComment || i.remark || i.spec"
+            :when="i.updatedAt" :note="i.reviewComment || i.remark || i.spec"
           >
             <template #tags>
               <span class="tag">{{ changeOf(i).label }}</span>
