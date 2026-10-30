@@ -8,7 +8,7 @@ if (!can('reviewBudget')) await navigateTo('/budget')
 const { data: view, refresh } = await useBudgetRound()
 const { data: people, refresh: refreshPeople } = await useFetch('/api/budget/people', { default: () => [] })
 
-const collecting = computed(() => view.value?.round.status === 'collecting')
+const collecting = computed(() => !!view.value && view.value.round.status !== 'confirmed')
 const teams = computed(() => view.value?.teams ?? [])
 
 /** 行ごとの編集中の値 */
@@ -68,7 +68,7 @@ const bureauList = useId()
   <section>
     <p><NuxtLink to="/budget/collect">← 集約</NuxtLink></p>
     <h1>局・担当と入力する人</h1>
-    <p v-if="!collecting" class="card">集約中の予算がありません。「集約」の画面で集約を始めてから設定してください。</p>
+    <p v-if="!collecting" class="card">確定していない集約がありません。「集約」の画面で集約を始めてから設定してください。</p>
     <template v-else>
       <p class="hint">
         担当ごとに、明細を入力する人を割り当ててください。割り当てられた人は、自分の担当の明細だけを直して提出できます。

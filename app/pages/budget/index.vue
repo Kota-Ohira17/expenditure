@@ -9,7 +9,7 @@ const { data: view, refresh } = await useBudgetRound()
 const { data: lines, refresh: refreshLines } = await useBudgetLines()
 const budgetKind = useBudgetKind()
 
-const collecting = computed(() => view.value?.round.status === 'collecting' ? view.value.round : null)
+const collecting = computed(() => view.value && view.value.round.status !== 'confirmed' ? view.value.round : null)
 
 const errors = ref<string[]>([])
 const message = ref('')
@@ -52,7 +52,7 @@ const total = computed(() => lines.value.reduce((s, l) => s + l.budgetAmount, 0)
     <p v-if="message" class="ok">{{ message }}</p>
 
     <p v-if="collecting" class="card notice">
-      {{ collecting.term }} {{ collecting.kind }}を集約中です。明細の入力・提出は「<NuxtLink to="/budget/collect">集約</NuxtLink>」から。
+      {{ collecting.term }} {{ collecting.kind }}の集約が進んでいます（{{ PHASE_LABELS[collecting.status] }}）。明細の入力・提出は「<NuxtLink to="/budget/collect">集約</NuxtLink>」から。
       確定するまで、執行依頼では下の予算から選びます。
     </p>
 

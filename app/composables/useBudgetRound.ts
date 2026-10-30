@@ -8,6 +8,15 @@ export function useBudgetRound() {
 export type BudgetRoundView = NonNullable<Awaited<ReturnType<typeof useBudgetRound>>['data']['value']>
 export type BudgetTeamView = BudgetRoundView['teams'][number]
 export type BudgetItemView = BudgetRoundView['items'][number]
+export type BudgetPhase = BudgetRoundView['round']['status']
+
+/** 集約の段階の名前（集約開始 → 集約終了 → 査定開始 → 確定 の順に進む） */
+export const PHASE_LABELS: Record<BudgetPhase, string> = {
+  collecting: '集約中',
+  closed: '集約終了',
+  reviewing: '査定中',
+  confirmed: '確定',
+}
 
 /** 明細の状態の表示（削除する明細は「削除」を添える） */
 export const itemStatusLabel = (i: Pick<BudgetItemView, 'status' | 'deleted'>) =>

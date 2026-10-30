@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 集約。集約中なら、担当ごとの進み具合と、自分が入力する担当への入口。財務管理部には設定・確定・取りやめ。
+ * 集約。確定していない集約があれば、段階（集約中 → 集約終了 → 査定中）と担当ごとの進み具合、自分の担当への入口。
+ * 財務管理部は段階を進める：集約中は「すべて提出」「集約終了」、集約終了は「査定開始」、査定中は「すべて承認」「確定」。
  * 集約していないときは、財務管理部には次の集約を始めるフォーム（最新の確定した予算を写して始める）。
  */
 const { can } = usePermissions()
@@ -8,7 +9,16 @@ const reviewer = computed(() => can('reviewBudget'))
 const { data: view, refresh } = await useBudgetRound()
 const { refresh: refreshLines } = await useBudgetLines()
 
-const collecting = computed(() => view.value?.round.status === 'collecting' ? view.value : null)
+const collecting = computed(() => view.value && view.value.round.status !== 'confirmed' ? view.value : null)
+const phase = computed(() => collecting.value?.round.status ?? 'confirmed')
+/** 段階の並び（今いる段階を目立たせる） */
+const STEPS = [
+  { key: 'collecting', label: '集約開始' },
+  { key: 'closed', label: '集約終了' },
+  { key: 'reviewing', label: '査定開始' },
+  { key: 'confirmed', label: '確定' },
+] as const
+const stepIndex = computed(() => STEPS.findIndex(s => s.key === phase.value))
 const itemsOf = (teamId: number) => view.value?.items.filter(i => i.teamId === teamId) ?? []
 
 /** 担当のカードの中身：状態の札（次に動く人が分かるもの）・合計・最後に直した明細 */
@@ -73,8 +83,18 @@ function submitAll() {
   if (!collecting.value || !s || !confirm(`すべての担当の未提出 ${s.draft}件・要修正 ${s.returned}件を提出します（査定待ちになります）。よろしいですか？`)) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/submit-all`, { method: 'POST' }), 'すべての明細を提出しました。「査定」で査定できます。')
 }
-/** 自分の担当の未提出・要修正をまとめて提出する（担当の人） */
-const toSubmitOf = (teamId: number) => itemsOf(teamId).filter(i => i.status === 'draft' || i.status === 'returned').length
+/** 集約終了（入力の締め切り。未提出・要修正は自動で提出される） */
+function closeRound() {
+  if (!collecting.value || !confirm(`集約を終了します。担当はこれ以上入力できなくなり、未提出・要修正の明細${notSubmitted.value}件は自動で提出されます。よろしいですか？`)) return
+  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/close`, { method: 'POST' }), '集約を終了しました。「査定開始」で査定を始められます。')
+}
+/** 査定開始 */
+function startReview() {
+  if (!collecting.value || !confirm('査定を始めます。要修正になった明細だけ、担当が直して出し直せます。よろしいですか？')) return
+  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/start-review`, { method: 'POST' }), '査定を始めました。「査定」の画面で査定できます。')
+}
+/** 自分の担当の未提出・要修正をまとめて提出する（担当の人。集約終了の間はできない） */
+const toSubmitOf = (teamId: number) => (phase.value === 'closed' ? 0 : itemsOf(teamId).filter(i => i.status === 'draft' || i.status === 'returned').length)
 function submitTeam(t: BudgetTeamView) {
   if (!confirm(`${t.team}の未提出・要修正の明細${toSubmitOf(t.id)}件を提出します。提出すると、査定が終わるまで直せません。よろしいですか？`)) return
   act(() => $fetch(`/api/budget/teams/${t.id}/submit`, { method: 'POST' }), `${t.team}の明細を提出しました。財務管理部の査定を待ってください。`)
@@ -93,22 +113,35 @@ function cancelRound() {
 
     <template v-if="collecting">
       <div class="card head">
-        <h2>{{ collecting.round.term }} {{ collecting.round.kind }}を集約中</h2>
+        <h2>{{ collecting.round.term }} {{ collecting.round.kind }}（{{ PHASE_LABELS[phase] }}）</h2>
+        <ol class="steps">
+          <li v-for="(st, i) in STEPS" :key="st.key" :class="{ done: i < stepIndex, now: i === stepIndex }">{{ st.label }}</li>
+        </ol>
         <p class="hint">
-          {{ collecting.round.kind === '補正予算'
-            ? '確定した本予算を写しています。変える明細だけを直して提出してください（直していない明細は承認済みのままです）。'
-            : '昨年の予算を写しています。担当ごとに明細を確かめ、直して、すべて提出してください。' }}
+          <template v-if="phase === 'collecting'">
+            {{ collecting.round.kind === '補正予算'
+              ? '確定した本予算を写しています。変える明細だけを直して提出してください（直していない明細は承認済みのままです）。'
+              : '昨年の予算を写しています。担当ごとに明細を確かめ、直して、すべて提出してください。' }}
+          </template>
+          <template v-else-if="phase === 'closed'">集約は終了しました。担当はもう入力できません。「査定開始」で査定を始めてください。</template>
+          <template v-else>査定中です。要修正になった明細だけ、担当が直して出し直せます。すべて承認したら確定してください。</template>
         </p>
         <p v-if="summary">
           合計 <strong>{{ formatYen(summary.total) }}</strong>（もとの予算 {{ formatYen(summary.base) }}）・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <div v-if="reviewer" class="buttons">
-          <NuxtLink class="button" to="/budget/review">査定（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
+          <template v-if="phase === 'collecting'">
+            <button :disabled="pending || !notSubmitted" @click="submitAll">すべて提出（{{ notSubmitted }}件）</button>
+            <button :disabled="pending" @click="closeRound">集約終了</button>
+          </template>
+          <button v-else-if="phase === 'closed'" :disabled="pending" @click="startReview">査定開始</button>
+          <template v-else>
+            <NuxtLink class="button" to="/budget/review">査定（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
+            <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
+            <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
+          </template>
           <NuxtLink class="button secondary" to="/budget/setup">局・担当と入力する人</NuxtLink>
-          <button :disabled="pending || !notSubmitted" @click="submitAll">すべて提出（{{ notSubmitted }}件）</button>
-          <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
-          <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
           <button class="secondary" :disabled="pending" @click="cancelRound">集約の取りやめ</button>
         </div>
       </div>
@@ -118,7 +151,7 @@ function cancelRound() {
         <ul class="team-links">
           <li v-for="t in myTeams" :key="t.id">
             <NuxtLink :to="`/budget/team/${t.id}`">{{ t.bureau }} ／ {{ t.team }}</NuxtLink>
-            <button class="submit-team" :disabled="pending || !toSubmitOf(t.id)" @click="submitTeam(t)">すべて提出（{{ toSubmitOf(t.id) }}件）</button>
+            <button v-if="phase !== 'closed'" class="submit-team" :disabled="pending || !toSubmitOf(t.id)" @click="submitTeam(t)">すべて提出（{{ toSubmitOf(t.id) }}件）</button>
           </li>
         </ul>
       </div>
@@ -131,7 +164,7 @@ function cancelRound() {
           :status="c.status.label" :tone="c.status.tone"
           :meta="`${c.team.bureauNo}　入力する人：${c.team.members.map(m => m.name).join('、') || '未割り当て'}`"
           :title="`${c.team.bureau} ／ ${c.team.team}`"
-          :who="c.last?.updatedByName" :when="c.last?.updatedAt"
+          :when="c.last?.updatedAt"
           :note="c.last ? `${itemName(c.last)}${c.last.reviewComment ? `：${c.last.reviewComment}` : ''}` : ''"
         >
           <template #tags>
@@ -154,7 +187,7 @@ function cancelRound() {
           まだ予算がありません。{{ reviewer ? '「予算」の画面で、もとにする予算（昨年の予算など）を取り込んでから始めてください。' : '財務管理部が予算を用意するまでお待ちください。' }}
         </p>
         <template v-else-if="reviewer">
-          <p class="hint">確定した予算（{{ view.round.term }} {{ view.round.kind }}）をまるごと写して始めます。各担当が直して提出し、「査定」で査定して確定します。</p>
+          <p class="hint">確定した予算（{{ view.round.term }} {{ view.round.kind }}）をまるごと写して始めます。集約開始 → 集約終了 → 査定開始 → 確定の順に進めます。</p>
           <form class="start" @submit.prevent="startRound">
             <fieldset class="kind">
               <legend>予算の種類</legend>
@@ -176,6 +209,11 @@ function cancelRound() {
 .head h2, .card h2 { margin: 0; font-size: 1.1rem; }
 h2 { font-size: 1.1rem; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
+.steps { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0; padding: 0; list-style: none; counter-reset: step; font-size: .85rem; }
+.steps li { padding: .25rem .8rem; border-radius: 999px; background: #ecebe8; color: var(--muted); }
+.steps li + li::before { content: '→ '; }
+.steps li.done { background: #dff1e3; color: #1e6b34; }
+.steps li.now { background: var(--accent-bg); color: var(--text); font-weight: 700; }
 .kind { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
 .team-links { margin: 0; padding-left: 1.2rem; display: grid; gap: .4rem; }
 .submit-team { margin-left: .8rem; padding: .3rem .7rem; font-size: .85rem; }

@@ -8,8 +8,9 @@ import { budgetItemSchema } from '../../../../../shared/schemas'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
-  const { team, round } = await collectingTeamOr404(Number(getRouterParam(event, 'id')))
+  const { team, round } = await openTeamOr404(Number(getRouterParam(event, 'id')))
   if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の明細は入力できません。' })
+  assertCanAddItem(user, round)
   const raw = await readBody(event)
   const body = parseOr400(budgetItemSchema.safeParse(raw))
   const approve = raw?.approve === true && can(user.role, 'reviewBudget')

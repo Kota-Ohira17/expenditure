@@ -166,8 +166,10 @@ export const users = sqliteTable('users', {
 
 export type User = typeof users.$inferSelect
 
-/** 予算の集約の状態：各担当が入力・提出し、財務管理部が査定する（collecting）→ 確定（confirmed） */
-export const BUDGET_ROUND_STATUSES = ['collecting', 'confirmed'] as const
+/**
+ * 予算の集約の段階：集約中（各担当が入力・提出）→ 集約終了（入力を締め切る）→ 査定中（財務管理部が査定、要修正だけ担当が直す）→ 確定
+ */
+export const BUDGET_ROUND_STATUSES = ['collecting', 'closed', 'reviewing', 'confirmed'] as const
 /** 明細の査定の状態：未提出 → 査定待ち → 承認済み、または要修正（担当に戻る） */
 export const BUDGET_ITEM_STATUSES = ['draft', 'submitted', 'returned', 'approved'] as const
 

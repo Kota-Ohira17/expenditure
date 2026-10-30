@@ -7,8 +7,8 @@ import { eq } from 'drizzle-orm'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
-  const { item, team } = await collectingItemOr404(Number(getRouterParam(event, 'id')))
-  await assertCanChangeItem(user, item, team)
+  const { item, team, round } = await openItemOr404(Number(getRouterParam(event, 'id')))
+  await assertCanChangeItem(user, item, team, round)
   const db = useDb()
   if (item.baseItemId == null) {
     await db.delete(schema.budgetItems).where(eq(schema.budgetItems.id, item.id))
