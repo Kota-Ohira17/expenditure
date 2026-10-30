@@ -2,7 +2,8 @@
 /**
  * 担当の予算の明細。その担当の人（と財務管理部）は、明細を直す・足す・消すことができ、終わったら提出する。
  * 担当の人が直せるのは、集約中は査定待ち以外、査定中は要修正の明細だけ。集約終了のあとは直せない（財務管理部は確定までいつでも）。
- * 写してきた明細を消すと「削除」の印が付き、査定で承認されると確定したときに予算から消える。
+ * 本予算は空から作り、「昨年の予算・決算（参考）」から明細をコピーできる（1件・款ごと・すべて）。
+ * 補正予算で写してきた明細を消すと「削除」の印が付き、査定で承認されると確定したときに予算から消える。
  * ほかの人は見るだけ。
  */
 import type { BudgetItemInput } from '#shared/schemas'
@@ -31,6 +32,20 @@ const kanNames = computed(() => kans.value.map(k => k.kan).filter(Boolean))
 /** 折りたたんだ款（見出しを押すと開け閉めできる） */
 const folded = reactive(new Set<string>())
 const toggle = (kan: string) => (folded.has(kan) ? folded.delete(kan) : folded.add(kan))
+
+/** 昨年の予算・決算（本予算の集約のときの参考。1件・款ごと・すべてをコピーできる） */
+const { data: reference, refresh: refreshReference } = await useFetch(`/api/budget/teams/${teamId}/reference`)
+type RefItem = NonNullable<NonNullable<typeof reference.value>>['items'][number]
+const refKans = computed(() => {
+  const groups = new Map<string, RefItem[]>()
+  for (const i of reference.value?.items ?? []) groups.set(i.kan, [...(groups.get(i.kan) ?? []), i])
+  return [...groups].map(([kan, list]) => ({ kan, list, budget: list.reduce((s, i) => s + i.amount, 0), actual: list.reduce((s, i) => s + i.actual, 0) }))
+})
+const refTotal = computed(() => refKans.value.reduce((s, k) => ({ budget: s.budget + k.budget, actual: s.actual + k.actual }), { budget: 0, actual: 0 }))
+const notCopied = (list: RefItem[]) => list.filter(i => !i.copied).map(i => i.id)
+/** はじめは、まだ明細がないときだけ開いておく */
+const refOpen = ref(items.value.length === 0)
+const copy = (ids: number[]) => run(() => $fetch(`/api/budget/teams/${teamId}/copy`, { method: 'POST', body: { ids } }), `${ids.length}件コピーしました。直してから提出してください。`)
 const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
   || (phase.value === 'collecting' && i.status !== 'submitted')
   || (phase.value === 'reviewing' && (i.status === 'returned' || i.status === 'draft')))
@@ -51,7 +66,7 @@ async function run(task: () => Promise<unknown>, done = '') {
     await task()
     editing.value = null
     message.value = done
-    await refresh()
+    await Promise.all([refresh(), reference.value && refreshReference()])
   }
   catch (error) {
     errors.value = toMessages(error)
@@ -90,7 +105,7 @@ function addTo(kan: string) {
 
       <div class="card head">
         <p>
-          合計 <strong>{{ formatYen(summary.total) }}</strong>（もとの予算 {{ formatYen(summary.base) }}）・
+          合計 <strong>{{ formatYen(summary.total) }}</strong>（{{ view.round.kind === '本予算' ? `昨年の予算 ${formatYen(refTotal.budget)}` : `もとの予算 ${formatYen(summary.base)}` }}）・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
@@ -109,6 +124,59 @@ function addTo(kan: string) {
         :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
       />
 
+      <section v-if="reference" class="reference" :class="{ folded: !refOpen }">
+        <header class="ref-head" @click="refOpen = !refOpen">
+          <button class="fold" :aria-expanded="refOpen" :aria-label="refOpen ? '折りたたむ' : '開く'" @click.stop="refOpen = !refOpen">
+            <AppIcon name="chevron-down" />
+          </button>
+          <div class="ref-title">
+            <h2>昨年の予算・決算（参考）</h2>
+            <span class="muted">{{ reference.round.term }} {{ reference.round.kind }}・予算 {{ formatYen(refTotal.budget) }} ／ 決算 {{ formatYen(refTotal.actual) }}</span>
+          </div>
+          <button
+            v-if="canAdd && notCopied(reference.items).length" class="secondary" :disabled="pending"
+            @click.stop="copy(notCopied(reference.items))"
+          >
+            すべてコピー（{{ notCopied(reference.items).length }}件）
+          </button>
+        </header>
+        <div v-if="refOpen" class="ref-body">
+          <p class="hint">昨年の明細です。そのまま使える明細はコピーして、直してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は、対応済みの執行依頼の執行額の合計です。</p>
+          <p v-if="!reference.items.length" class="hint">昨年の予算に、この担当の明細はありません。</p>
+          <div v-for="k in refKans" :key="k.kan" class="kan">
+            <div class="kan-head">
+              <h3>{{ k.kan || '（款なし）' }}</h3>
+              <span class="muted">予算 {{ formatYen(k.budget) }} ／ 決算 {{ formatYen(k.actual) }}</span>
+              <button v-if="canAdd && notCopied(k.list).length" class="link" :disabled="pending" @click="copy(notCopied(k.list))">この款をコピー</button>
+            </div>
+            <div class="table-wrap">
+              <table class="items ref">
+                <thead>
+                  <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>予算額</th><th>決算額</th><th>取引先</th><th /></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="i in k.list" :key="i.id">
+                    <td class="no">{{ i.itemNumber }}</td>
+                    <td>{{ itemName(i) }}<small v-if="i.spec" class="muted spec">{{ i.spec }}</small></td>
+                    <td>{{ i.quantity }}</td>
+                    <td class="num">{{ formatYen(i.amount) }}</td>
+                    <td class="num">
+                      {{ formatYen(i.actual) }}
+                      <small v-if="i.actualUnknown" class="muted spec">執行額未入力 {{ i.actualUnknown }}件</small>
+                    </td>
+                    <td>{{ i.vendor }}</td>
+                    <td class="actions">
+                      <span v-if="i.copied" class="muted">コピー済み</span>
+                      <button v-else-if="canAdd" class="link" :disabled="pending" @click="copy([i.id])">コピー</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div v-for="k in kans" :key="k.kan" class="kan" :class="{ folded: folded.has(k.kan) }">
         <div class="kan-head">
           <button class="fold" :aria-expanded="!folded.has(k.kan)" :aria-label="folded.has(k.kan) ? '開く' : '折りたたむ'" @click="toggle(k.kan)">
@@ -122,7 +190,7 @@ function addTo(kan: string) {
         <div v-show="!folded.has(k.kan)" class="table-wrap">
           <table class="items">
             <thead>
-              <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>単価</th><th>金額</th><th>もとの予算から</th><th>取引先</th><th>状態</th><th /></tr>
+              <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>単価</th><th>金額</th><th>{{ view.round.kind === '本予算' ? '昨年から' : 'もとの予算から' }}</th><th>取引先</th><th>状態</th><th /></tr>
             </thead>
             <tbody>
               <template v-for="i in k.list" :key="i.id">
@@ -176,6 +244,17 @@ function addTo(kan: string) {
 .fold:hover:not(:disabled) { background: var(--accent-bg); }
 .fold :deep(.app-icon) { transition: transform .15s; }
 .kan.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
+/* 昨年の予算・決算（参考）：本体の明細と見分けられるよう、点線の枠で囲む */
+.reference { margin: 1rem 0 1.6rem; border: 1.5px dashed var(--border); border-radius: 12px; background: var(--panel); }
+.ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; cursor: pointer; user-select: none; }
+.ref-title { flex: 1 1 14rem; display: grid; }
+.ref-title h2 { font-size: 1rem; margin: 0; }
+.ref-title .muted { font-size: .82rem; }
+.reference.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
+.ref-body { padding: 0 .8rem .8rem; }
+.ref-body .kan { margin: .8rem 0; }
+.ref-body h3 { font-size: .95rem; margin: 0; }
+.items.ref { min-width: 44rem; }
 .table-wrap { overflow-x: auto; }
 .items { border-collapse: collapse; width: 100%; min-width: 52rem; background: var(--surface); }
 .items th, .items td { padding: .4rem .55rem; border-bottom: 1px solid var(--border); text-align: left; font-size: .88rem; vertical-align: top; }

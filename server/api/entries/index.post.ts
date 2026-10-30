@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   // 予算からの変更は申請者に選ばせず、予算額と執行額から決める（予算にない項目なら決めない）
   const budgetChange = lines.length ? budgetChangeOfItems(lines, itemAmounts).change : null
   if (budgetChange === LARGE_INCREASE && !budgetCommitteeApproved) {
-    throw createError({ statusCode: 400, message: '1万円以上の増額は、予算委員会の承認を得てから申請してください（承認のチェックが必要です）。' })
+    throw createError({ statusCode: 400, message: '1万円以上の増額は、役員会の承認を得てから申請してください（承認のチェックが必要です）。' })
   }
 
   const attachmentId = file

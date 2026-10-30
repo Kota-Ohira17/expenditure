@@ -100,7 +100,7 @@ const diffYen = computed(() => {
   const d = (budgetSummary.value?.actual ?? 0) - (budgetSummary.value?.budget ?? 0)
   return `${d > 0 ? '+' : d < 0 ? '-' : '±'}¥${Math.abs(d).toLocaleString('ja-JP')}`
 })
-/** 1万円以上の増額なのに、予算委員会の承認にチェックがない */
+/** 1万円以上の増額なのに、役員会の承認にチェックがない */
 const needsApproval = computed(() => budgetSummary.value?.change === LARGE_INCREASE && !form.budgetCommitteeApproved)
 
 /** 2段目の執行形態（現金執行 / カード決済 / その他） */
@@ -319,9 +319,9 @@ async function onSubmit() {
           <p class="hint">選んだ明細の予算額と、明細ごとに入力した金額から自動で決まります。増額の場合は、必ずZAIに相談してください。</p>
           <label v-if="budgetSummary.change === LARGE_INCREASE" class="check approval">
             <input v-model="form.budgetCommitteeApproved" type="checkbox" required>
-            予算委員会の承認を得ました<span class="req">*</span>
+            役員会の承認を得ました<span class="req">*</span>
           </label>
-          <p v-if="budgetSummary.change === LARGE_INCREASE" class="hint">1万円以上の増額は、予算委員会の承認を得てから申請してください。</p>
+          <p v-if="budgetSummary.change === LARGE_INCREASE" class="hint">1万円以上の増額は、役員会の承認を得てから申請してください。</p>
         </div>
         <div class="confirm">
           <span class="block-label">以上の内容に誤りがないことを確認しましたか？<span class="req">*</span></span>

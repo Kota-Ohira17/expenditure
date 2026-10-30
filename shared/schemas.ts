@@ -52,7 +52,7 @@ const base = z.object({
   inCharge: required('担当名'),
   ...items,
   itemName: required('支出項目名'),
-  /** 1万円以上の増額のとき、予算委員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
+  /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
   budgetCommitteeApproved: z.boolean().default(false),
   remark: z.string().trim().default(''),
 })
@@ -164,6 +164,11 @@ export const budgetItemSchema = z.object({
   if (!v.kou && !v.moku && !v.setsu) ctx.addIssue({ code: 'custom', message: '項・目・節のどれかに名前を入れてください。', path: ['kou'] })
 })
 export type BudgetItemInput = z.input<typeof budgetItemSchema>
+
+/** 昨年の予算の明細をコピーする（本予算の集約） */
+export const budgetCopySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(5000),
+})
 
 /** 予算の変更（集約とは別に、確定した予算の明細を直す・足す・消す）。修正・追加は values、修正・削除は itemId が要る */
 export const budgetChangeSchema = z.object({

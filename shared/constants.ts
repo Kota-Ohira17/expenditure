@@ -55,7 +55,7 @@ export function budgetChangeOf(actual: number, budget: number): BudgetChange {
   return '変動なし'
 }
 
-/** 1万円以上の増額は予算委員会の承認が要る */
+/** 1万円以上の増額は役員会の承認が要る */
 export const LARGE_INCREASE: BudgetChange = '大幅な増額（1万円以上）'
 
 /**
