@@ -7,7 +7,6 @@
 const { can } = usePermissions()
 const reviewer = computed(() => can('reviewBudget'))
 const { data: view, refresh } = await useBudgetRound()
-const { refresh: refreshLines } = await useBudgetLines()
 
 const collecting = computed(() => view.value && view.value.round.status !== 'confirmed' ? view.value : null)
 const phase = computed(() => collecting.value?.round.status ?? 'confirmed')
@@ -45,14 +44,15 @@ const myTeams = computed(() => (collecting.value && !reviewer.value ? collecting
 const errors = ref<string[]>([])
 const message = ref('')
 const pending = ref(false)
-async function act(run: () => Promise<unknown>, done: string) {
+async function act(run: () => Promise<unknown>, done: string, linesChanged = false) {
   errors.value = []
   message.value = ''
   pending.value = true
   try {
     await run()
     message.value = done
-    await Promise.all([refresh(), refreshLines()])
+    // 予算明細（執行依頼で選ぶ予算）が変わるのは確定したときだけ
+    await Promise.all([refresh(), linesChanged && refreshNuxtData('budget-lines')])
   }
   catch (error) {
     errors.value = toMessages(error)
@@ -67,7 +67,7 @@ const start = reactive({ kind: '' as '' | '本予算' | '補正予算', term: ''
 const startRound = () => act(() => $fetch('/api/budget/rounds', { method: 'POST', body: start }), `${start.term} ${start.kind}の集約を始めました。`)
 function confirmRound() {
   if (!collecting.value || !confirm('予算を確定します。今の予算明細がこの予算に入れ替わります。よろしいですか？')) return
-  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/confirm`, { method: 'POST' }), '予算を確定しました。執行依頼ではこの予算から選べます。')
+  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/confirm`, { method: 'POST' }), '予算を確定しました。執行依頼ではこの予算から選べます。', true)
 }
 /** まだ承認していない明細（未提出・要修正・査定待ち）の数。「すべて承認」で一度に承認できる */
 const notApproved = computed(() => (summary.value ? summary.value.draft + summary.value.returned + summary.value.submitted : 0))
