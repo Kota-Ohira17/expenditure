@@ -13,12 +13,12 @@ export type BudgetItemView = BudgetRoundView['items'][number]
 export const itemStatusLabel = (i: Pick<BudgetItemView, 'status' | 'deleted'>) =>
   `${ITEM_STATUS_LABELS[i.status]}${i.deleted ? '（削除）' : ''}`
 
-/** もとの予算からの変わり方（新規・削除・増減・変わらず） */
+/** もとの予算からの変わり方（新規・削除・増減・変更なし） */
 export function changeOf(i: Pick<BudgetItemView, 'amount' | 'baseAmount' | 'baseItemId' | 'deleted'>) {
   if (i.deleted) return { label: '削除', kind: 'minus' as const }
   if (i.baseItemId == null) return { label: '新規', kind: 'plus' as const }
   const d = i.amount - (i.baseAmount ?? 0)
-  if (d === 0) return { label: '変わらず', kind: 'same' as const }
+  if (d === 0) return { label: '変更なし', kind: 'same' as const }
   return { label: `${d > 0 ? '+' : '-'}¥${Math.abs(d).toLocaleString('ja-JP')}`, kind: d > 0 ? 'plus' as const : 'minus' as const }
 }
 

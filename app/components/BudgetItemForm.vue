@@ -79,7 +79,7 @@ function onSubmit() {
     <ul v-if="errors?.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
     <div class="buttons">
       <button type="submit" :disabled="pending">{{ pending ? '保存中…' : submitLabel }}</button>
-      <button type="button" class="secondary" @click="emit('cancel')">やめる</button>
+      <button type="button" class="secondary" @click="emit('cancel')">キャンセル</button>
     </div>
   </form>
 </template>

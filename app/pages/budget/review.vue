@@ -10,7 +10,7 @@ if (!can('reviewBudget')) await navigateTo('/budget')
 const { data: view, refresh } = await useBudgetRound()
 
 const collecting = computed(() => view.value?.round.status === 'collecting')
-/** 表示する状態（査定待ち・要修正で戻したもの・承認済みのうち、もとの予算から変わったもの） */
+/** 表示する状態（査定待ち・要修正もの・承認済みのうち、もとの予算から変わったもの） */
 type Filter = 'submitted' | 'returned' | 'approved'
 const FILTERS = [
   { key: 'submitted', label: '査定待ち', icon: 'clock' },
@@ -117,10 +117,10 @@ async function approveAll(ids: number[]) {
             <option v-for="t in view?.teams ?? []" :key="t.id" :value="t.id">{{ t.bureau }} ／ {{ t.team }}</option>
           </select>
         </label>
-        <label class="check"><input v-model="createApprove" type="checkbox"> そのまま承認済みにする</label>
+        <label class="check"><input v-model="createApprove" type="checkbox"> そのまま承認済み</label>
       </div>
       <BudgetItemForm
-        :key="createTeam" :kans="createKans" submit-label="登録する" :errors="createErrors"
+        :key="createTeam" :kans="createKans" submit-label="登録" :errors="createErrors"
         @submit="createItem" @cancel="creating = false"
       />
     </div>
@@ -180,8 +180,8 @@ async function approveAll(ids: number[]) {
             <template v-if="i.status === 'submitted'" #footer>
               <div class="actions">
                 <input v-model="comments[i.id]" class="comment" placeholder="コメント（要修正のときは必須）">
-                <button :disabled="busy !== null" @click="review(i.id, 'approve')">承認する</button>
-                <button class="secondary" :disabled="busy !== null" @click="review(i.id, 'return')">要修正で戻す</button>
+                <button :disabled="busy !== null" @click="review(i.id, 'approve')">承認</button>
+                <button class="secondary" :disabled="busy !== null" @click="review(i.id, 'return')">要修正</button>
               </div>
               <ul v-if="errors[i.id]?.length" class="error"><li v-for="e in errors[i.id]" :key="e">{{ e }}</li></ul>
             </template>

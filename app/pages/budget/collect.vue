@@ -104,17 +104,17 @@ function cancelRound() {
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <div v-if="reviewer" class="buttons">
-          <NuxtLink class="button" to="/budget/review">査定する（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
+          <NuxtLink class="button" to="/budget/review">査定（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
           <NuxtLink class="button secondary" to="/budget/setup">局・担当と入力する人</NuxtLink>
           <button :disabled="pending || !notSubmitted" @click="submitAll">すべて提出（{{ notSubmitted }}件）</button>
           <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
-          <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定する</button>
-          <button class="secondary" :disabled="pending" @click="cancelRound">集約をやめる</button>
+          <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
+          <button class="secondary" :disabled="pending" @click="cancelRound">集約の取りやめ</button>
         </div>
       </div>
 
       <div v-if="myTeams.length" class="card">
-        <h2>あなたが入力する担当</h2>
+        <h2>あなたの担当</h2>
         <ul class="team-links">
           <li v-for="t in myTeams" :key="t.id">
             <NuxtLink :to="`/budget/team/${t.id}`">{{ t.bureau }} ／ {{ t.team }}</NuxtLink>
@@ -162,7 +162,7 @@ function cancelRound() {
               <label class="check"><input v-model="start.kind" type="radio" value="補正予算"> 補正予算（同じ期）</label>
             </fieldset>
             <label>期<input v-model.trim="start.term" class="w-m" required placeholder="例：第100期"></label>
-            <button type="submit" :disabled="pending || !start.kind || !start.term">集約を始める</button>
+            <button type="submit" :disabled="pending || !start.kind || !start.term">集約開始</button>
           </form>
         </template>
         <p v-else class="hint">財務管理部が集約を始めると、ここから自分の担当の明細を入力できます。</p>

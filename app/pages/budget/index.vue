@@ -76,7 +76,7 @@ const total = computed(() => lines.value.reduce((s, l) => s + l.budgetAmount, 0)
             <label class="check"><input v-model="seedKind" type="radio" value="revised"> 補正予算</label>
           </fieldset>
           <label>CSV ファイル<input type="file" accept=".csv,text/csv" required @change="seedFile = ($event.target as HTMLInputElement).files?.[0] ?? null"></label>
-          <button type="submit" :disabled="pending || !seedFile || !seedKind">取り込む</button>
+          <button type="submit" :disabled="pending || !seedFile || !seedKind">取り込み</button>
         </form>
       </template>
       <p v-else class="hint">財務管理部が予算を用意するまでお待ちください。</p>
