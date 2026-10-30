@@ -33,13 +33,12 @@ const stateOf = (i: number) => (i < NOW[props.phase] ? 'done' : i === NOW[props.
       <strong class="label">{{ n.label }}</strong>
       <span v-if="n.note && stateOf(i) === 'now'" class="note">{{ n.note }}</span>
       <span v-if="n.loop" class="loop">要修正 ⇄ 出し直し</span>
-      <span v-if="stateOf(i) === 'now'" class="here">いまここ</span>
     </li>
   </ol>
 </template>
 
 <style scoped>
-.flow { display: flex; align-items: stretch; margin: .9rem 0 .4rem; padding: 0; list-style: none; }
+.flow { display: flex; align-items: stretch; margin: .2rem 0 .4rem; padding: 0; list-style: none; }
 .node { position: relative; flex: 1 1 0; min-width: 0; display: grid; align-content: center; justify-items: center; gap: .1rem; text-align: center; padding: .55rem .4rem; border: 1.5px solid var(--border); background: var(--surface); color: var(--muted); font-size: .8rem; }
 /* 財務管理部の操作は四角、作業の期間は角丸の塗り */
 .node.step { border-radius: 6px; }
@@ -52,7 +51,6 @@ const stateOf = (i: number) => (i < NOW[props.phase] ? 'done' : i === NOW[props.
 .label { font-size: .92rem; color: var(--text); }
 .note { font-size: .74rem; color: var(--text); line-height: 1.35; }
 .loop { font-size: .7rem; padding: 0 .45rem; border-radius: 999px; background: #fbe4e4; color: #b42318; white-space: nowrap; }
-.here { position: absolute; top: -.7rem; left: 50%; transform: translateX(-50%); font-size: .66rem; font-weight: 700; padding: 0 .45rem; border-radius: 999px; background: var(--text); color: var(--surface); white-space: nowrap; }
 .node.done { border-color: #9fd0aa; background: #eef8f0; color: #1e6b34; }
 .node.done .label { color: #1e6b34; }
 .node.now { border: 2.5px solid var(--text); background: var(--accent-bg); color: var(--text); box-shadow: var(--shadow); }
@@ -66,6 +64,5 @@ const stateOf = (i: number) => (i < NOW[props.phase] ? 'done' : i === NOW[props.
   .node + .node { margin: 1.4rem 0 0; }
   .node + .node::before { left: 50%; top: -1.25rem; width: 0; height: 1rem; border-top: none; border-left: 1.5px solid var(--muted); }
   .node + .node::after { left: 50%; top: -.45rem; transform: translateX(-50%); border: .3rem solid transparent; border-top: .4rem solid var(--muted); border-bottom: none; }
-  .here { top: 50%; left: auto; right: .6rem; transform: translateY(-50%); }
 }
 </style>
