@@ -241,3 +241,36 @@ export const budgetItems = sqliteTable('budget_items', {
 export type BudgetRound = typeof budgetRounds.$inferSelect
 export type BudgetTeam = typeof budgetTeams.$inferSelect
 export type BudgetItem = typeof budgetItems.$inferSelect
+
+/**
+ * 予算の変更（集約とは別に、確定した予算の明細を直す・足す・消す）。
+ * 担当の人は申請して財務管理部の承認を待つ。財務管理部は直接変更できる（申請と承認を同時に行った扱い）。
+ * 承認したものが変更の履歴になる。だれが変えたかは画面に出さない（メールは記録だけ）。
+ */
+export const BUDGET_CHANGE_KINDS = ['edit', 'add', 'delete'] as const
+export const BUDGET_CHANGE_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn'] as const
+export const budgetChanges = sqliteTable('budget_changes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** 変更した確定済みの予算（集約） */
+  roundId: integer('round_id').notNull().references(() => budgetRounds.id),
+  teamId: integer('team_id').notNull().references(() => budgetTeams.id),
+  /** 対象の明細（追加は反映したときに入る） */
+  itemId: integer('item_id'),
+  /** 項目番号（追加は反映したときに付いた番号） */
+  itemNumber: text('item_number').notNull().default(''),
+  kind: text('kind', { enum: BUDGET_CHANGE_KINDS }).notNull(),
+  status: text('status', { enum: BUDGET_CHANGE_STATUSES }).notNull().default('pending'),
+  /** 財務管理部が直接変更したもの */
+  direct: integer('direct', { mode: 'boolean' }).notNull().default(false),
+  /** 変更前と変更後の明細の値（追加は before なし、削除は after なし） */
+  before: text('before', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  after: text('after', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  reason: text('reason').notNull().default(''),
+  reviewComment: text('review_comment').notNull().default(''),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  createdBy: text('created_by').notNull(),
+  reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }),
+  reviewedBy: text('reviewed_by'),
+})
+
+export type BudgetChange = typeof budgetChanges.$inferSelect

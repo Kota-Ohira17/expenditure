@@ -165,6 +165,27 @@ export const budgetItemSchema = z.object({
 })
 export type BudgetItemInput = z.input<typeof budgetItemSchema>
 
+/** 予算の変更（集約とは別に、確定した予算の明細を直す・足す・消す）。修正・追加は values、修正・削除は itemId が要る */
+export const budgetChangeSchema = z.object({
+  kind: z.enum(['edit', 'add', 'delete']),
+  teamId: z.number().int().positive(),
+  itemId: z.number().int().positive().nullish(),
+  values: budgetItemSchema.nullish(),
+  reason: z.string().trim().max(1000).default(''),
+}).superRefine((v, ctx) => {
+  if (v.kind !== 'add' && !v.itemId) ctx.addIssue({ code: 'custom', message: '変える明細を選んでください。', path: ['itemId'] })
+  if (v.kind !== 'delete' && !v.values) ctx.addIssue({ code: 'custom', message: '明細の内容を入力してください。', path: ['values'] })
+})
+export type BudgetChangeInput = z.input<typeof budgetChangeSchema>
+
+/** 予算の変更の承認・却下（財務管理部）。却下は理由を書く */
+export const budgetChangeReviewSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  comment: z.string().trim().max(1000).default(''),
+}).superRefine((v, ctx) => {
+  if (v.decision === 'reject' && !v.comment) ctx.addIssue({ code: 'custom', message: '却下の理由を書いてください。', path: ['comment'] })
+})
+
 /** 査定（財務管理部）：承認か、要修正（理由を書く） */
 /** 査定待ちの明細をまとめて承認する（査定の「まとめて承認」） */
 export const budgetApproveSchema = z.object({

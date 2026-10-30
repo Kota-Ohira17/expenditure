@@ -1,0 +1,20 @@
+CREATE TABLE `budget_changes` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`round_id` integer NOT NULL,
+	`team_id` integer NOT NULL,
+	`item_id` integer,
+	`item_number` text DEFAULT '' NOT NULL,
+	`kind` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`direct` integer DEFAULT false NOT NULL,
+	`before` text,
+	`after` text,
+	`reason` text DEFAULT '' NOT NULL,
+	`review_comment` text DEFAULT '' NOT NULL,
+	`created_at` integer NOT NULL,
+	`created_by` text NOT NULL,
+	`reviewed_at` integer,
+	`reviewed_by` text,
+	FOREIGN KEY (`round_id`) REFERENCES `budget_rounds`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`team_id`) REFERENCES `budget_teams`(`id`) ON UPDATE no action ON DELETE no action
+);

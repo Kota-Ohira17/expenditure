@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { assignItemNumbers, confirmSheetRows } from '../../shared/budgetCompile'
 import { can } from '../../shared/roles'
-import type { BudgetRound, BudgetTeam } from '../db/schema'
+import type { BudgetItem, BudgetRound, BudgetTeam } from '../db/schema'
 import type { BudgetKind, ParsedBudgetLine, ParsedSheetRow } from './budget'
 import type { SessionUser } from './auth'
 
@@ -127,6 +127,8 @@ function sheetExtras(stored: { role: string, cells: string[], lineKey: string | 
 export async function startRound(kind: BudgetKind, term: string, user: SessionUser) {
   const db = useDb()
   if (await openRound()) throw createError({ statusCode: 409, message: '確定していない集約があります。確定するか取りやめてから始めてください。' })
+  const pending = await db.select({ id: schema.budgetChanges.id }).from(schema.budgetChanges).where(eq(schema.budgetChanges.status, 'pending'))
+  if (pending.length) throw createError({ statusCode: 409, message: `承認待ちの予算の変更が${pending.length}件あります。「予算の変更」で承認か却下をしてから始めてください。` })
   await ensureInitialRound(user)
   const base = await latestConfirmedRound()
   if (!base) throw createError({ statusCode: 400, message: 'もとにする予算がありません。最初の予算を取り込んでください。' })
@@ -183,26 +185,33 @@ export async function confirmRound(round: BudgetRound) {
   if (waiting.length) {
     throw createError({ statusCode: 400, message: `承認していない明細が${waiting.length}件あります。すべて承認してから確定してください。` })
   }
-  const numbers = assignItemNumbers(teams, items, round.kind === '補正予算')
+  // 番号の書き込み・予算明細の入れ替え・確定の印を、DB への1回のやりとりでまとめて行う（途中で失敗したら全部取り消される）
+  const { lines, statements } = budgetFromItems(round, teams, items, round.kind === '補正予算')
+  await db.batch([
+    db.update(schema.budgetRounds).set({ status: 'confirmed', confirmedAt: new Date() }).where(eq(schema.budgetRounds.id, round.id)),
+    ...statements,
+  ])
+  return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0) }
+}
+
+/**
+ * 集約の明細から予算明細（budget_lines）と「支出」シートの行を作り直す文。確定したときと、予算の変更を反映したときに使う。
+ * 付けた番号は明細に残す（次に補正予算を写すとき、この番号を引き継ぐ）。keepNumbers なら今の番号を残し、番号のない明細にだけ付ける。
+ */
+export function budgetFromItems(round: Pick<BudgetRound, 'kind'>, teams: BudgetTeam[], items: BudgetItem[], keepNumbers: boolean) {
+  const db = useDb()
+  const numbers = assignItemNumbers(teams, items, keepNumbers)
   const { lines, sheetRows } = parseBudgetRows(confirmSheetRows(teams, items, numbers))
   if (!lines.length) throw createError({ statusCode: 400, message: '明細がありません。' })
-
-  // 付けた番号を明細に残す（次に補正予算を写すとき、この番号を引き継ぐ）。
-  // 番号の書き込み・予算明細の入れ替え・確定の印を、DB への1回のやりとりでまとめて行う（途中で失敗したら全部取り消される）
-  const live = items.filter(i => !i.deleted)
-  const numberUpdates = Array.from({ length: Math.ceil(live.length / CHUNK) }, (_, c) => {
-    const chunk = live.slice(c * CHUNK, (c + 1) * CHUNK)
+  const changed = items.filter(i => !i.deleted && i.itemNumber !== (numbers.get(i.id) ?? ''))
+  const numberUpdates = Array.from({ length: Math.ceil(changed.length / CHUNK) }, (_, c) => {
+    const chunk = changed.slice(c * CHUNK, (c + 1) * CHUNK)
     const cases = sql.join(chunk.map(i => sql`when ${i.id} then ${numbers.get(i.id) ?? ''}`), sql` `)
     return db.update(schema.budgetItems)
       .set({ itemNumber: sql`case ${schema.budgetItems.id} ${cases} end` })
       .where(inArray(schema.budgetItems.id, chunk.map(i => i.id)))
   })
-  await db.batch([
-    db.update(schema.budgetRounds).set({ status: 'confirmed', confirmedAt: new Date() }).where(eq(schema.budgetRounds.id, round.id)),
-    ...numberUpdates,
-    ...replaceBudgetLinesStatements(lines, sheetRows, round.kind),
-  ])
-  return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0) }
+  return { lines, numbers, statements: [...numberUpdates, ...replaceBudgetLinesStatements(lines, sheetRows, round.kind)] }
 }
 
 /** 集約をやめる（集約中の明細と担当を消す。確定した予算は変わらない） */
