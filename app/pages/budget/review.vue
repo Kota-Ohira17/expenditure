@@ -21,7 +21,7 @@ const FILTERS = [
 ] as const
 const filter = ref<Filter>('submitted')
 const inFilter = (i: BudgetItemView, f: Filter) => i.status === f && (f !== 'approved' || changeOf(i).kind !== 'same')
-/** 検索と絞り込み（局・担当・変わり方・その他） */
+/** 検索と絞り込み（局・担当・変更の種類・その他） */
 const query = ref('')
 const bureau = ref('')
 const teamId = ref<number | ''>('')
@@ -144,8 +144,8 @@ async function approveAll(ids: number[]) {
         </div>
         <div class="drops">
           <select v-model="teamId" aria-label="担当"><option value="">担当</option><option v-for="t in teamOptions" :key="t.id" :value="t.id">{{ t.team }}</option></select>
-          <select v-model="change" aria-label="変わり方">
-            <option value="">変わり方</option><option value="plus">増額</option><option value="minus">減額</option><option value="new">新規の明細</option><option value="deleted">削除</option>
+          <select v-model="change" aria-label="変更の種類">
+            <option value="">変更の種類</option><option value="plus">増額</option><option value="minus">減額</option><option value="new">新規の明細</option><option value="deleted">削除</option>
           </select>
           <select v-model="flag" aria-label="その他">
             <option value="">その他</option><option value="isNew">新規の印あり</option><option value="preExecution">予算前執行</option><option value="comment">コメントあり</option>
