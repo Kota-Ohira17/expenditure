@@ -101,15 +101,13 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
 function sheetExtras(stored: { role: string, cells: string[], lineKey: string | null }[]) {
   const header = stored.find(r => r.role === 'header')?.cells.map(normalizeHeader) ?? []
   const col = (...names: string[]) => names.map(n => header.indexOf(n)).find(i => i >= 0) ?? -1
-  const [team, person, spec] = [col('担当', '担当名'), col('担当者'), col('仕様・詳細', '仕様等', '仕様')]
-  const persons = new Map<string, string>()
+  const spec = col('仕様・詳細', '仕様等', '仕様')
   const specs = new Map<string, string>()
   for (const r of stored.filter(r => r.role === 'row')) {
     const at = (i: number) => (i >= 0 ? (r.cells[i] ?? '').trim() : '')
-    if (at(team) && at(person)) persons.set(at(team), at(person))
     if (r.lineKey && at(spec)) specs.set(r.lineKey, at(spec))
   }
-  return { persons, specs }
+  return { specs }
 }
 
 /** 決算に載せる明細（執行したものだけ、予算の並び順）。予算に載っていない申請は「予算にない項目」の局にまとめる */
@@ -160,7 +158,8 @@ function settledLines(lines: BudgetLine[], done: DoneEntry[], extras: ReturnType
       itemNumber: l.itemNumber,
       bureau: l.bureau,
       team: l.team,
-      person: extras.persons.get(l.team) ?? '',
+      // 担当者の氏名は持たないので、決算シートの「担当者」の列は空にする
+      person: '',
       kan: l.kan,
       kou: l.kou,
       moku: l.moku,

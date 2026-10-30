@@ -73,7 +73,7 @@ function addTo(kan: string) {
     <template v-if="team && view">
       <h1>{{ team.bureau }} ／ {{ team.team }}</h1>
       <p class="hint">
-        {{ view.round.term }} {{ view.round.kind }}{{ collecting ? '（集約中）' : '（確定）' }}・担当者 {{ team.person || '未設定' }}・入力する人
+        {{ view.round.term }} {{ view.round.kind }}{{ collecting ? '（集約中）' : '（確定）' }}・入力する人
         {{ team.members.map(m => m.name).join('、') || '未割り当て' }}
       </p>
 
