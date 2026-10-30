@@ -224,13 +224,14 @@ function withdraw(c: Change) {
           <span v-if="c.direct" class="tag">財務管理部が直接変更</span>
           <span v-if="c.mine && !c.direct" class="tag">あなたの申請</span>
         </template>
-        <ul class="diff">
-          <li v-for="d in diffOf(c)" :key="d.label">
+        <!-- カードの中身は <p> の中に入るので、ブロックの要素は使わない -->
+        <span class="diff">
+          <span v-for="d in diffOf(c)" :key="d.label" class="diff-row">
             <span class="field">{{ d.label }}</span>
             <template v-if="c.kind === 'edit'"><span class="from">{{ d.from }}</span> → <strong>{{ d.to }}</strong></template>
             <span v-else :class="{ from: c.kind === 'delete' }">{{ d.to }}</span>
-          </li>
-        </ul>
+          </span>
+        </span>
         <template v-if="c.status === 'pending' && (reviewer || c.mine)" #footer>
           <div class="actions">
             <template v-if="reviewer">
@@ -259,7 +260,8 @@ function withdraw(c: Change) {
 .kind { display: flex; flex-wrap: wrap; gap: .3rem 1rem; }
 .buttons { display: flex; gap: .5rem; }
 .danger { background: var(--danger); color: #fff; border-color: var(--danger); }
-.diff { margin: 0; padding: 0; list-style: none; display: grid; gap: .15rem; font-weight: 400; font-size: .88rem; }
+.diff { display: grid; gap: .15rem; font-weight: 400; font-size: .88rem; }
+.diff-row { display: block; }
 .field { display: inline-block; min-width: 6.5rem; color: var(--muted); font-size: .8rem; }
 .from { color: var(--muted); text-decoration: line-through; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
