@@ -10,6 +10,24 @@ const { refresh: refreshLines } = await useBudgetLines()
 
 const collecting = computed(() => view.value?.round.status === 'collecting' ? view.value : null)
 const itemsOf = (teamId: number) => view.value?.items.filter(i => i.teamId === teamId) ?? []
+
+/** 担当のカードの中身：状態の札（次に動く人が分かるもの）・合計・最後に直した明細 */
+function teamCard(t: BudgetTeamView) {
+  const items = itemsOf(t.id)
+  const s = teamSummary(items)
+  const status = s.returned ? { label: '要修正あり', tone: 'red' as const }
+    : s.draft ? { label: '未提出あり', tone: 'gray' as const }
+      : s.submitted ? { label: '査定待ち', tone: 'yellow' as const }
+        : { label: '承認済み', tone: 'green' as const }
+  const last = items.reduce<BudgetItemView | undefined>((a, b) => (!a || new Date(b.updatedAt) > new Date(a.updatedAt) ? b : a), undefined)
+  const changed = items.filter(i => changeOf(i).kind !== 'same').length
+  return { s, status, last, changed, mine: collecting.value?.editableTeamIds.includes(t.id) && !reviewer.value }
+}
+/** 自分の担当を先に、そのあと要修正・未提出・査定待ち・承認済みの順に並べる */
+const order = { red: 0, gray: 1, yellow: 2, green: 3 }
+const cards = computed(() => (collecting.value?.teams ?? [])
+  .map(t => ({ team: t, ...teamCard(t) }))
+  .sort((a, b) => Number(!!b.mine) - Number(!!a.mine) || order[a.status.tone] - order[b.status.tone]))
 const summary = computed(() => (collecting.value ? teamSummary(collecting.value.items) : null))
 /** 自分が割り当てられた担当（財務管理部はどの担当も直せるので、一覧から入る） */
 const myTeams = computed(() => (collecting.value && !reviewer.value ? collecting.value.teams.filter(t => collecting.value!.editableTeamIds.includes(t.id)) : []))
@@ -82,25 +100,25 @@ function cancelRound() {
       <p v-else-if="!reviewer" class="hint">あなたはまだ担当に割り当てられていません。財務管理部に、入力する担当を割り当ててもらってください。</p>
 
       <h2>担当ごとの進み具合</h2>
-      <div class="table-wrap">
-        <table class="teams">
-          <thead>
-            <tr><th>局</th><th>担当</th><th>担当者</th><th>金額</th><th>もとの予算</th><th>未提出</th><th>要修正</th><th>査定待ち</th><th>承認済み</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="t in collecting.teams" :key="t.id">
-              <td>{{ t.bureau }}</td>
-              <td><NuxtLink :to="`/budget/team/${t.id}`">{{ t.team }}</NuxtLink></td>
-              <td>{{ t.person }}</td>
-              <td class="num">{{ formatYen(teamSummary(itemsOf(t.id)).total) }}</td>
-              <td class="num muted">{{ formatYen(teamSummary(itemsOf(t.id)).base) }}</td>
-              <td class="num" :class="{ warn: teamSummary(itemsOf(t.id)).draft }">{{ teamSummary(itemsOf(t.id)).draft }}</td>
-              <td class="num" :class="{ warn: teamSummary(itemsOf(t.id)).returned }">{{ teamSummary(itemsOf(t.id)).returned }}</td>
-              <td class="num">{{ teamSummary(itemsOf(t.id)).submitted }}</td>
-              <td class="num">{{ teamSummary(itemsOf(t.id)).approved }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="card-list">
+        <InfoCard
+          v-for="c in cards" :key="c.team.id" :to="`/budget/team/${c.team.id}`"
+          :status="c.status.label" :tone="c.status.tone"
+          :meta="`${c.team.bureauNo}　担当者：${c.team.person || '未設定'}　入力する人：${c.team.members.map(m => m.name).join('、') || '未割り当て'}`"
+          :title="`${c.team.bureau} ／ ${c.team.team}`"
+          :who="c.last?.updatedByName" :when="c.last?.updatedAt"
+          :note="c.last ? `${itemName(c.last)}${c.last.reviewComment ? `：${c.last.reviewComment}` : ''}` : ''"
+        >
+          <template #tags>
+            <span v-if="c.mine" class="tag">あなたの担当</span>
+            <span v-if="c.changed" class="tag">変更 {{ c.changed }}件</span>
+            <span v-if="c.s.returned" class="tag fill red">要修正 {{ c.s.returned }}</span>
+            <span v-if="c.s.draft" class="tag fill">未提出 {{ c.s.draft }}</span>
+            <span v-if="c.s.submitted" class="tag fill yellow">査定待ち {{ c.s.submitted }}</span>
+            <span v-if="c.s.approved" class="tag fill green">承認 {{ c.s.approved }}</span>
+          </template>
+          {{ formatYen(c.s.total) }}<span class="base">（もとの予算 {{ formatYen(c.s.base) }}）</span>
+        </InfoCard>
       </div>
     </template>
 
@@ -135,10 +153,6 @@ h2 { font-size: 1.1rem; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
 .kind { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
 .team-links { margin: 0; padding-left: 1.2rem; }
-.table-wrap { overflow-x: auto; }
-.teams { border-collapse: collapse; min-width: 44rem; background: var(--surface); }
-.teams th, .teams td { white-space: nowrap; padding: .45rem .6rem; border-bottom: 1px solid var(--border); text-align: left; font-size: .9rem; }
-.teams .num { text-align: right; font-variant-numeric: tabular-nums; }
-.teams .warn { color: var(--danger); font-weight: 600; }
+.base { font-weight: 400; color: var(--muted); margin-left: .3rem; font-size: .85rem; }
 .ok { color: var(--done); }
 </style>
