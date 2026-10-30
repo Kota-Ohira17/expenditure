@@ -193,3 +193,12 @@ dd { margin: 0; word-break: break-all; }
 .muted { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .env-banner { background: #fff4ce; color: #5c4400; border-bottom: 1px solid #e5c76b; padding: .4rem 1rem; font-size: .85rem; text-align: center; }
+
+/* カードの右上のタグ（枠線だけ＝種類、塗り＝状況） */
+.tag { display: inline-block; font-size: .75rem; padding: .12rem .6rem; border-radius: 999px; border: 1px solid #2f6fd6; color: #2f6fd6; background: var(--surface); white-space: nowrap; }
+.tag.fill { border-color: transparent; background: #ecebe8; color: #5f5a55; }
+.tag.fill.pink { background: #fbe3ec; color: #b0245c; }
+.tag.fill.green { background: #dff1e3; color: #1e6b34; }
+.tag.fill.yellow { background: #fbf0d4; color: #8a6200; }
+.tag.fill.red { background: #fbe4e4; color: #b42318; }
+.card-list { display: grid; gap: .8rem; }

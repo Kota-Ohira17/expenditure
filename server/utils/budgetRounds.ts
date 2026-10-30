@@ -207,10 +207,15 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
     ? await db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
       .from(schema.users).where(inArray(schema.users.budgetTeam, [...new Set(teams.map(t => t.team))]))
     : []
+  // 最後に直した人の名前（画面の右の欄に出す）
+  const editors = [...new Set(items.map(i => i.updatedBy))]
+  const names = new Map(editors.length
+    ? (await db.select({ email: schema.users.email, name: schema.users.name }).from(schema.users).where(inArray(schema.users.email, editors))).map(u => [u.email, u.name])
+    : [])
   return {
     round,
     teams: teams.map(t => ({ ...t, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
-    items: items.map(i => ({ ...i, number: numbers.get(i.id) ?? '' })),
+    items: items.map(i => ({ ...i, number: numbers.get(i.id) ?? '', updatedByName: names.get(i.updatedBy) ?? i.updatedBy })),
     editableTeamIds: editable,
   }
 }
