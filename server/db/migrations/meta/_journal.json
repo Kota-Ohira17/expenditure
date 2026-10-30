@@ -99,6 +99,13 @@
       "when": 1793328211346,
       "tag": "0013_clear_team_persons",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793338808129,
+      "tag": "0014_budget_changes",
+      "breakpoints": true
     }
   ]
 }
