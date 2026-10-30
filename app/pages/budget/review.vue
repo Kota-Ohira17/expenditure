@@ -2,10 +2,9 @@
 /**
  * 査定（財務管理部）。査定待ちの明細を担当ごとに並べ、明細ごとに承認するか、理由を書いて担当に戻す（要修正）。
  * もとの予算（昨年・本予算）からの変わり方も並べて見られる。
- * 上部：「新規登録」（財務管理部が明細を足す。そのまま承認済みにもできる）、局ごとのタブ、検索、状態の件数と絞り込み。
+ * 上部：局ごとのタブ、検索、状態の件数と絞り込み。
  * 担当ごとのまとまりは、はじめは折りたたんでおく（見出しを押すと開く）。
  */
-import type { BudgetItemInput } from '#shared/schemas'
 const { can } = usePermissions()
 if (!can('reviewBudget')) await navigateTo('/budget')
 const { data: view, refresh } = await useBudgetRound()
@@ -37,9 +36,9 @@ function matches(i: BudgetItemView, withBureau = true) {
   const t = teamById.value.get(i.teamId)
   if (withBureau && bureau.value && t?.bureau !== bureau.value) return false
   if (teamId.value !== '' && i.teamId !== teamId.value) return false
-  if (change.value === 'new' && i.baseItemId != null) return false
+  if (change.value === 'new' && i.baseAmount != null) return false
   if (change.value === 'deleted' && !i.deleted) return false
-  if ((change.value === 'plus' || change.value === 'minus') && (i.baseItemId == null || i.deleted || changeOf(i).kind !== change.value)) return false
+  if ((change.value === 'plus' || change.value === 'minus') && (i.baseAmount == null || i.deleted || changeOf(i).kind !== change.value)) return false
   if (flag.value === 'comment' && !i.reviewComment) return false
   if ((flag.value === 'isNew' || flag.value === 'preExecution') && !i[flag.value]) return false
   const words = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -56,29 +55,6 @@ const bureauTabs = computed(() => {
 const count = (f: Filter) => narrowed.value.filter(i => inFilter(i, f)).length
 const shown = computed(() => narrowed.value.filter(i => inFilter(i, filter.value)))
 
-/** 新規登録（財務管理部が明細を足す） */
-const creating = ref(false)
-const createTeam = ref<number | ''>('')
-const createApprove = ref(true)
-const createErrors = ref<string[]>([])
-const createDone = ref('')
-const createKans = computed(() => [...new Set((view.value?.items ?? []).filter(i => i.teamId === createTeam.value).map(i => i.kan).filter(Boolean))])
-async function createItem(value: BudgetItemInput) {
-  createErrors.value = []
-  if (createTeam.value === '') {
-    createErrors.value = ['担当を選んでください。']
-    return
-  }
-  try {
-    await $fetch(`/api/budget/teams/${createTeam.value}/items`, { method: 'POST', body: { ...value, approve: createApprove.value } })
-    createDone.value = createApprove.value ? '明細を足し、承認済みにしました。' : '明細を足しました（担当の「未提出」に入っています）。'
-    creating.value = false
-    await refresh()
-  }
-  catch (error) {
-    createErrors.value = toMessages(error)
-  }
-}
 const groups = computed(() => (view.value?.teams ?? [])
   .map(t => ({ team: t, list: shown.value.filter(i => i.teamId === t.id) }))
   .filter(g => g.list.length)
@@ -143,30 +119,8 @@ async function approveAll(ids: number[]) {
 
 <template>
   <section>
-    <div class="page-head">
-      <h1>査定</h1>
-      <button v-if="open" class="primary" @click="creating = !creating; createDone = ''">
-        <AppIcon name="plus" /> 新規登録
-      </button>
-    </div>
-    <p v-if="createDone" class="ok">{{ createDone }}</p>
+    <h1>査定</h1>
 
-    <div v-if="creating" class="card create">
-      <h2>明細を新規登録</h2>
-      <div class="create-fields">
-        <label><span>担当<span class="req">*</span></span>
-          <select v-model="createTeam" required>
-            <option value="">選んでください</option>
-            <option v-for="t in view?.teams ?? []" :key="t.id" :value="t.id">{{ t.bureau }} ／ {{ t.team }}</option>
-          </select>
-        </label>
-        <label class="check"><input v-model="createApprove" type="checkbox"> そのまま承認済み</label>
-      </div>
-      <BudgetItemForm
-        :key="createTeam" :kans="createKans" submit-label="登録" :errors="createErrors"
-        @submit="createItem" @cancel="creating = false"
-      />
-    </div>
     <p v-if="!collecting" class="card">
       {{ open
         ? `今は「${PHASE_LABELS[phase]}」です。査定は「集約終了」のあと「査定開始」を押すと使えます（「集約」の画面から）。`
@@ -226,11 +180,11 @@ async function approveAll(ids: number[]) {
           >
             <template #tags>
               <span class="tag">{{ changeOf(i).label }}</span>
-              <span v-if="i.isNew && i.baseItemId != null" class="tag fill pink">新規</span>
+              <span v-if="i.isNew && i.baseAmount != null" class="tag fill pink">新規</span>
               <span v-if="i.preExecution" class="tag fill yellow">予算前執行</span>
               <span v-if="i.deleted" class="tag fill red">削除</span>
             </template>
-            {{ formatYen(i.amount) }}<span v-if="i.baseItemId != null" class="base">（{{ view?.round.kind === '本予算' ? '昨年' : 'もとの予算' }} {{ formatYen(i.baseAmount) }}）</span>
+            {{ formatYen(i.amount) }}<span v-if="i.baseAmount != null" class="base">（{{ view?.round.kind === '本予算' ? '昨年' : 'もとの予算' }} {{ formatYen(i.baseAmount) }}）</span>
             <span class="sub">{{ [i.quantity && `数量 ${i.quantity}`, i.unitPrice != null && `単価 ${formatYen(i.unitPrice)}`, i.vendor].filter(Boolean).join('・') }}</span>
             <template v-if="i.status === 'submitted'" #footer>
               <div class="actions">
@@ -253,13 +207,6 @@ async function approveAll(ids: number[]) {
 
 <style scoped>
 .card { max-width: none; }
-.page-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-.page-head h1 { margin: 0; }
-.primary { display: inline-flex; align-items: center; gap: .35rem; background: #1a73e8; color: #fff; border: none; font-weight: 700; padding: .55rem 1rem; border-radius: 8px; }
-.primary:hover:not(:disabled) { background: #1666d0; }
-.create { margin: 1rem 0; display: grid; gap: .7rem; }
-.create h2 { margin: 0; font-size: 1.05rem; }
-.create-fields { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; align-items: end; }
 .search { display: flex; align-items: center; gap: .5rem; max-width: 36rem; margin: 1.2rem auto 1rem; padding: .1rem .8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); }
 .search input { border: none; background: transparent; padding: .5rem 0; max-width: none; outline: none; }
 .filter-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem 1rem; padding: .8rem 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 1rem; }

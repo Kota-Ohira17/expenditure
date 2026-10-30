@@ -131,7 +131,7 @@ function cancelRound() {
           <template v-if="phase === 'collecting'">
             {{ collecting.round.kind === '補正予算'
               ? '確定した本予算を写しています。変える明細だけを直して提出してください（直していない明細は承認済みのままです）。'
-              : '明細は空から作ります。担当の画面に昨年の予算・決算が参考として出るので、使える明細はコピーして直し、すべて提出してください。' }}
+              : '明細は空から作ります。担当の画面に、取り込んだ昨年の本予算・決算が参考として出るので、使える明細はコピーして直し、すべて提出してください。' }}
           </template>
           <template v-else-if="phase === 'closed'">集約は終了しました。担当はもう入力できません。「査定開始」で査定を始めてください。</template>
           <template v-else>査定中です。要修正になった明細だけ、担当が直して出し直せます。すべて承認したら確定してください。</template>
@@ -166,6 +166,7 @@ function cancelRound() {
         </ul>
       </div>
       <p v-else-if="!reviewer" class="hint">あなたはまだ担当に割り当てられていません。財務管理部に、入力する担当を割り当ててもらってください。</p>
+      <ReferenceImport v-if="reviewer && collecting.round.kind === '本予算'" />
 
       <h2>担当ごとの進み具合</h2>
       <BureauTabs v-model="bureau" :tabs="bureauTabs" />
@@ -211,7 +212,7 @@ function cancelRound() {
         <template v-else-if="reviewer">
           <p class="hint">
             確定した予算（{{ view.round.term }} {{ view.round.kind }}）の局・担当を写して始めます。
-            本予算は明細を空から作り、昨年の予算・決算を参考にコピーできます。補正予算は明細も写し、変えるものだけ直します。
+            本予算は明細を空から作り、取り込んだ昨年の本予算・決算を参考にコピーできます（下の「昨年の本予算・決算の取り込み」）。補正予算は明細も写し、変えるものだけ直します。
             集約開始 → 集約終了 → 査定開始 → 確定の順に進めます。
           </p>
           <form class="start" @submit.prevent="startRound">
@@ -226,6 +227,7 @@ function cancelRound() {
         </template>
         <p v-else class="hint">財務管理部が集約を始めると、ここから自分の担当の明細を入力できます。</p>
       </div>
+      <ReferenceImport v-if="reviewer && view" />
     </template>
   </section>
 </template>
