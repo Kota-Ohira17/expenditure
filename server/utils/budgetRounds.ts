@@ -71,7 +71,7 @@ export async function ensureInitialRound(user: SessionUser) {
     teamKeys.push(key)
     teamValues.push({
       roundId: round!.id, bureauNo: l.bureauNo || bureauNoOf(l.itemNumber), bureau: l.bureau, team: l.team,
-      person: extras.persons.get(l.team) ?? '', sortOrder: teamValues.length,
+      sortOrder: teamValues.length,
     })
   }
   const teams = await db.insert(schema.budgetTeams).values(teamValues).returning()
@@ -90,19 +90,17 @@ export async function ensureInitialRound(user: SessionUser) {
   for (let i = 0; i < items.length; i += CHUNK) await db.insert(schema.budgetItems).values(items.slice(i, i + CHUNK))
 }
 
-/** 取り込んだ「支出」シートの行から、予算明細には持っていない 担当者・仕様・単価・新規・予算前執行 を拾う */
+/** 取り込んだ「支出」シートの行から、予算明細には持っていない 仕様・単価・新規・予算前執行 を拾う（担当者の氏名は持たない） */
 function sheetExtras(stored: { role: string, cells: string[], lineKey: string | null }[]) {
   const header = stored.find(r => r.role === 'header')?.cells.map(normalizeHeader) ?? []
   const col = (...names: string[]) => names.map(n => header.indexOf(n)).find(i => i >= 0) ?? -1
-  const c = { team: col('担当', '担当名'), person: col('担当者'), spec: col('仕様・詳細', '仕様等', '仕様'), unit: col('単価'), isNew: col('新規'), pre: col('予算前執行') }
-  const persons = new Map<string, string>()
+  const c = { spec: col('仕様・詳細', '仕様等', '仕様'), unit: col('単価'), isNew: col('新規'), pre: col('予算前執行') }
   const items = new Map<string, { spec: string, unitPrice: number | null, isNew: boolean, preExecution: boolean }>()
   for (const r of stored.filter(r => r.role === 'row')) {
     const at = (i: number) => (i >= 0 ? (r.cells[i] ?? '').trim() : '')
-    if (at(c.team) && at(c.person)) persons.set(at(c.team), at(c.person))
     if (r.lineKey) items.set(r.lineKey, { spec: at(c.spec), unitPrice: parseMoney(at(c.unit)), isNew: at(c.isNew) === 'TRUE', preExecution: at(c.pre) === 'TRUE' })
   }
-  return { persons, items }
+  return { items }
 }
 
 /**

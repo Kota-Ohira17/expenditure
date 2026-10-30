@@ -178,7 +178,6 @@ export const budgetTeamSchema = z.object({
   bureauNo: required('局の番号（例：out01）').pipe(z.string().max(20)),
   bureau: required('局').pipe(z.string().max(30)),
   team: required('担当').pipe(z.string().max(50)),
-  person: z.string().trim().max(50).default(''),
 })
 
 /** 担当に割り当てる人（メールアドレスの一覧） */

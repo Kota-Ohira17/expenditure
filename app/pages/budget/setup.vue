@@ -12,14 +12,14 @@ const collecting = computed(() => view.value?.round.status === 'collecting')
 const teams = computed(() => view.value?.teams ?? [])
 
 /** 行ごとの編集中の値 */
-const drafts = reactive<Record<number, { bureauNo: string, bureau: string, team: string, person: string }>>({})
+const drafts = reactive<Record<number, { bureauNo: string, bureau: string, team: string }>>({})
 watchEffect(() => {
-  for (const t of teams.value) drafts[t.id] ??= { bureauNo: t.bureauNo, bureau: t.bureau, team: t.team, person: t.person }
+  for (const t of teams.value) drafts[t.id] ??= { bureauNo: t.bureauNo, bureau: t.bureau, team: t.team }
 })
 const changed = (id: number) => {
   const t = teams.value.find(x => x.id === id)
   const d = drafts[id]
-  return !!t && !!d && (t.bureauNo !== d.bureauNo || t.bureau !== d.bureau || t.team !== d.team || t.person !== d.person)
+  return !!t && !!d && (t.bureauNo !== d.bureauNo || t.bureau !== d.bureau || t.team !== d.team)
 }
 const adding = reactive<Record<number, string>>({})
 const messages = reactive<Record<string, { ok: boolean, text: string }>>({})
@@ -51,7 +51,7 @@ function addMember(t: BudgetTeamView) {
   setMembers(t.id, [...t.members.map(m => m.email), email])
 }
 
-const newTeam = reactive({ bureauNo: '', bureau: '', team: '', person: '' })
+const newTeam = reactive({ bureauNo: '', bureau: '', team: '' })
 const bureaus = computed(() => [...new Map(teams.value.map(t => [t.bureau, t.bureauNo])).entries()])
 watch(() => newTeam.bureau, (b) => {
   const known = bureaus.value.find(([name]) => name === b)
@@ -59,7 +59,7 @@ watch(() => newTeam.bureau, (b) => {
 })
 const addTeam = () => run('new', async () => {
   await $fetch('/api/budget/teams', { method: 'POST', body: newTeam })
-  Object.assign(newTeam, { bureauNo: '', bureau: '', team: '', person: '' })
+  Object.assign(newTeam, { bureauNo: '', bureau: '', team: '' })
 }, '担当を足しました。')
 const bureauList = useId()
 </script>
@@ -77,14 +77,13 @@ const bureauList = useId()
 
       <div class="table-wrap">
         <table class="teams">
-          <thead><tr><th>局の番号</th><th>局</th><th>担当</th><th>担当者</th><th>入力する人</th><th /></tr></thead>
+          <thead><tr><th>局の番号</th><th>局</th><th>担当</th><th>入力する人</th><th /></tr></thead>
           <tbody>
             <tr v-for="t in teams" :key="t.id">
               <template v-if="drafts[t.id]">
                 <td><input v-model.trim="drafts[t.id]!.bureauNo" class="w-xs"></td>
                 <td><input v-model.trim="drafts[t.id]!.bureau" class="w-s"></td>
                 <td><input v-model.trim="drafts[t.id]!.team" class="w-s"></td>
-                <td><input v-model.trim="drafts[t.id]!.person" class="w-s"></td>
                 <td class="members">
                   <span v-for="m in t.members" :key="m.email" class="chip">
                     {{ m.name }}
@@ -112,7 +111,6 @@ const bureauList = useId()
           <datalist :id="bureauList"><option v-for="[b] in bureaus" :key="b" :value="b" /></datalist>
           <label>局の番号<input v-model.trim="newTeam.bureauNo" class="w-xs" required placeholder="例：out01"></label>
           <label>担当<input v-model.trim="newTeam.team" required placeholder="例：環境計画部長"></label>
-          <label>担当者<input v-model.trim="newTeam.person" placeholder="氏名"></label>
         </div>
         <p v-if="messages.new" :class="messages.new.ok ? 'ok' : 'error'">{{ messages.new.text }}</p>
         <button type="submit" :disabled="busy">足す</button>

@@ -211,6 +211,11 @@ export function parseBudgetRows(rows: string[][]): { lines: ParsedBudgetLine[], 
       if (!l.label.endsWith(`（${hint(l)}）`)) l.label += `（${hint(l)}）`
     }
   }
+  // 担当者の氏名は持たない（「担当者」の列は空にして保存する）
+  const personCol = rows[headerIndex]!.map(normalizeHeader).indexOf('担当者')
+  if (personCol >= 0) {
+    for (const r of sheetRows) if (r.role === 'row' && r.cells[personCol]) r.cells = r.cells.map((c, i) => (i === personCol ? '' : c))
+  }
   // 末尾の空の行は持たない
   while (sheetRows.length && sheetRows.at(-1)!.role === 'row' && sheetRows.at(-1)!.cells.every(c => !c.trim())) sheetRows.pop()
   return { lines, sheetRows }

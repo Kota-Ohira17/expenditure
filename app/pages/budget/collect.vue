@@ -59,6 +59,13 @@ function confirmRound() {
   if (!collecting.value || !confirm('予算を確定します。今の予算明細がこの予算に入れ替わります。よろしいですか？')) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/confirm`, { method: 'POST' }), '予算を確定しました。執行依頼ではこの予算から選べます。')
 }
+/** まだ承認していない明細（未提出・要修正・査定待ち）の数。「すべて承認」で一度に承認できる */
+const notApproved = computed(() => (summary.value ? summary.value.draft + summary.value.returned + summary.value.submitted : 0))
+function approveAll() {
+  const s = summary.value
+  if (!collecting.value || !s || !confirm(`未提出 ${s.draft}件・要修正 ${s.returned}件・査定待ち ${s.submitted}件を、すべて承認済みにします。担当がまだ提出していない明細も承認されます。よろしいですか？`)) return
+  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/approve-all`, { method: 'POST' }), 'すべての明細を承認しました。確定できます。')
+}
 function cancelRound() {
   if (!collecting.value || !confirm('集約をやめます。この集約で入力した明細はすべて消えます。よろしいですか？')) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}`, { method: 'DELETE' }), '集約をやめました。')
@@ -86,7 +93,8 @@ function cancelRound() {
         <div v-if="reviewer" class="buttons">
           <NuxtLink class="button" to="/budget/review">査定する（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
           <NuxtLink class="button secondary" to="/budget/setup">局・担当と入力する人</NuxtLink>
-          <button :disabled="pending" @click="confirmRound">確定する</button>
+          <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
+          <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定する</button>
           <button class="secondary" :disabled="pending" @click="cancelRound">集約をやめる</button>
         </div>
       </div>
@@ -104,7 +112,7 @@ function cancelRound() {
         <InfoCard
           v-for="c in cards" :key="c.team.id" :to="`/budget/team/${c.team.id}`"
           :status="c.status.label" :tone="c.status.tone"
-          :meta="`${c.team.bureauNo}　担当者：${c.team.person || '未設定'}　入力する人：${c.team.members.map(m => m.name).join('、') || '未割り当て'}`"
+          :meta="`${c.team.bureauNo}　入力する人：${c.team.members.map(m => m.name).join('、') || '未割り当て'}`"
           :title="`${c.team.bureau} ／ ${c.team.team}`"
           :who="c.last?.updatedByName" :when="c.last?.updatedAt"
           :note="c.last ? `${itemName(c.last)}${c.last.reviewComment ? `：${c.last.reviewComment}` : ''}` : ''"
