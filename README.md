@@ -127,6 +127,7 @@ Google OAuth を用意していない場合は `.env` で `NUXT_PUBLIC_DEV_LOGIN
 
    `NUXT_PUBLIC_DEV_LOGIN` は**設定しない**こと（誰でも任意のメールで入れてしまう）。
 3. デプロイ。ビルド時に `drizzle-kit migrate` が Turso にテーブルを作る（`vercel.json` → `npm run build:vercel`）
+   - サーバーの処理は東京（`vercel.json` の `regions: ["hnd1"]`）で動かす。Turso も東京にあるので、DB とのやりとりが速い
 
 ### テスト用ログインの注意
 合言葉を知っている人は、他人の ECC メールでも入れます。管理者用の合言葉で入ると、どのメールでも管理者になります（`NUXT_ADMIN_EMAILS` のメールは管理者用の合言葉でしか入れません）。
