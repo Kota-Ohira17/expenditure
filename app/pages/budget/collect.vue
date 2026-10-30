@@ -10,14 +10,6 @@ const { data: view, refresh } = await useBudgetRound()
 
 const collecting = computed(() => view.value && view.value.round.status !== 'confirmed' ? view.value : null)
 const phase = computed(() => collecting.value?.round.status ?? 'confirmed')
-/** 段階の並び（今いる段階を目立たせる） */
-const STEPS = [
-  { key: 'collecting', label: '集約開始' },
-  { key: 'closed', label: '集約終了' },
-  { key: 'reviewing', label: '査定開始' },
-  { key: 'confirmed', label: '確定' },
-] as const
-const stepIndex = computed(() => STEPS.findIndex(s => s.key === phase.value))
 const itemsOf = (teamId: number) => view.value?.items.filter(i => i.teamId === teamId) ?? []
 
 /** 担当のカードの中身：状態の札（次に動く人が分かるもの）・合計・最後に直した明細 */
@@ -114,9 +106,7 @@ function cancelRound() {
     <template v-if="collecting">
       <div class="card head">
         <h2>{{ collecting.round.term }} {{ collecting.round.kind }}（{{ PHASE_LABELS[phase] }}）</h2>
-        <ol class="steps">
-          <li v-for="(st, i) in STEPS" :key="st.key" :class="{ done: i < stepIndex, now: i === stepIndex }">{{ st.label }}</li>
-        </ol>
+        <BudgetFlow :phase="phase" :summary="summary" />
         <p class="hint">
           <template v-if="phase === 'collecting'">
             {{ collecting.round.kind === '補正予算'
@@ -209,11 +199,6 @@ function cancelRound() {
 .head h2, .card h2 { margin: 0; font-size: 1.1rem; }
 h2 { font-size: 1.1rem; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
-.steps { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0; padding: 0; list-style: none; counter-reset: step; font-size: .85rem; }
-.steps li { padding: .25rem .8rem; border-radius: 999px; background: #ecebe8; color: var(--muted); }
-.steps li + li::before { content: '→ '; }
-.steps li.done { background: #dff1e3; color: #1e6b34; }
-.steps li.now { background: var(--accent-bg); color: var(--text); font-weight: 700; }
 .kind { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
 .team-links { margin: 0; padding-left: 1.2rem; display: grid; gap: .4rem; }
 .submit-team { margin-left: .8rem; padding: .3rem .7rem; font-size: .85rem; }
