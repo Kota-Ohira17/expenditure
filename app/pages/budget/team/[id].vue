@@ -82,8 +82,7 @@ function addTo(kan: string) {
     <template v-if="team && view">
       <h1>{{ team.bureau }} ／ {{ team.team }}</h1>
       <p class="hint">
-        {{ view.round.term }} {{ view.round.kind }}（{{ PHASE_LABELS[phase] }}）・入力する人
-        {{ team.members.map(m => m.name).join('、') || '未割り当て' }}
+        {{ view.round.term }} {{ view.round.kind }}（{{ PHASE_LABELS[phase] }}）・入力する人 {{ team.members.length ? `${team.members.length}人` : '未割り当て' }}
       </p>
 
       <div class="card head">
