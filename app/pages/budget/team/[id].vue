@@ -69,7 +69,7 @@ function addTo(kan: string) {
 
 <template>
   <section>
-    <p><NuxtLink to="/budget/collect">← 集約に戻る</NuxtLink></p>
+    <p><NuxtLink to="/budget/collect">← 集約</NuxtLink></p>
     <template v-if="team && view">
       <h1>{{ team.bureau }} ／ {{ team.team }}</h1>
       <p class="hint">
@@ -85,14 +85,14 @@ function addTo(kan: string) {
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
         <p v-if="message" class="ok">{{ message }}</p>
         <div v-if="editable" class="buttons">
-          <button :disabled="pending || !toSubmit" @click="submit">提出する（{{ toSubmit }}件）</button>
-          <button class="secondary" :disabled="pending" @click="addTo('')">明細を足す</button>
+          <button :disabled="pending || !toSubmit" @click="submit">提出（{{ toSubmit }}件）</button>
+          <button class="secondary" :disabled="pending" @click="addTo('')">明細の追加</button>
         </div>
         <p v-else-if="collecting" class="hint">この担当の明細は見るだけです（入力できるのは、この担当に割り当てられた人と財務管理部です）。</p>
       </div>
 
       <BudgetItemForm
-        v-if="editing === 'new'" :initial="{ kan: newKan }" :kans="kanNames" submit-label="足す"
+        v-if="editing === 'new'" :initial="{ kan: newKan }" :kans="kanNames" submit-label="追加"
         :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
       />
 
@@ -100,7 +100,7 @@ function addTo(kan: string) {
         <div class="kan-head">
           <h2>{{ k.kan || '（款なし）' }}</h2>
           <span class="muted">{{ formatYen(k.total) }}</span>
-          <button v-if="editable" class="link" @click="addTo(k.kan)">この款に足す</button>
+          <button v-if="editable" class="link" @click="addTo(k.kan)">この款に追加</button>
         </div>
         <div class="table-wrap">
           <table class="items">
@@ -123,16 +123,16 @@ function addTo(kan: string) {
                   </td>
                   <td class="actions">
                     <template v-if="canChange(i)">
-                      <button v-if="!i.deleted" class="link" @click="editing = i.id">直す</button>
-                      <button v-if="!i.deleted" class="link" @click="remove(i)">消す</button>
-                      <button v-else class="link" @click="restore(i)">消すのをやめる</button>
+                      <button v-if="!i.deleted" class="link" @click="editing = i.id">修正</button>
+                      <button v-if="!i.deleted" class="link" @click="remove(i)">削除</button>
+                      <button v-else class="link" @click="restore(i)">削除の取り消し</button>
                     </template>
                   </td>
                 </tr>
                 <tr v-if="editing === i.id">
                   <td colspan="9">
                     <BudgetItemForm
-                      :initial="i" :kans="kanNames" submit-label="保存する" :pending="pending" :errors="errors"
+                      :initial="i" :kans="kanNames" submit-label="保存" :pending="pending" :errors="errors"
                       @submit="save" @cancel="editing = null"
                     />
                   </td>

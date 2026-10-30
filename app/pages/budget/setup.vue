@@ -66,7 +66,7 @@ const bureauList = useId()
 
 <template>
   <section>
-    <p><NuxtLink to="/budget/collect">← 集約に戻る</NuxtLink></p>
+    <p><NuxtLink to="/budget/collect">← 集約</NuxtLink></p>
     <h1>局・担当と入力する人</h1>
     <p v-if="!collecting" class="card">集約中の予算がありません。「集約」の画面で集約を始めてから設定してください。</p>
     <template v-else>
@@ -90,7 +90,7 @@ const bureauList = useId()
                     <button class="link" :title="`${m.name} を外す`" :disabled="busy" @click="setMembers(t.id, t.members.filter(x => x.email !== m.email).map(x => x.email))">×</button>
                   </span>
                   <select v-model="adding[t.id]" class="w-s" :disabled="busy" @change="addMember(t)">
-                    <option value="">＋人を足す</option>
+                    <option value="">＋人の追加</option>
                     <option v-for="p in people.filter(p => !t.members.some(m => m.email === p.email))" :key="p.email" :value="p.email">
                       {{ p.name }}（{{ p.email }}）{{ p.team ? `・今は${p.team}` : '' }}
                     </option>
@@ -105,7 +105,7 @@ const bureauList = useId()
       </div>
 
       <form class="card add" @submit.prevent="addTeam">
-        <h2>担当を足す</h2>
+        <h2>担当の追加</h2>
         <div class="fields">
           <label>局<input v-model.trim="newTeam.bureau" :list="bureauList" required placeholder="例：事務局"></label>
           <datalist :id="bureauList"><option v-for="[b] in bureaus" :key="b" :value="b" /></datalist>
@@ -113,7 +113,7 @@ const bureauList = useId()
           <label>担当<input v-model.trim="newTeam.team" required placeholder="例：環境計画部長"></label>
         </div>
         <p v-if="messages.new" :class="messages.new.ok ? 'ok' : 'error'">{{ messages.new.text }}</p>
-        <button type="submit" :disabled="busy">足す</button>
+        <button type="submit" :disabled="busy">追加</button>
       </form>
     </template>
   </section>
