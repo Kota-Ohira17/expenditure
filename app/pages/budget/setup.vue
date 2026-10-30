@@ -112,7 +112,7 @@ const bureauList = useId()
           <datalist :id="bureauList"><option v-for="[b] in bureaus" :key="b" :value="b" /></datalist>
           <label>局の番号<input v-model.trim="newTeam.bureauNo" class="w-xs" required placeholder="例：out01"></label>
           <label>担当<input v-model.trim="newTeam.team" required placeholder="例：環境計画部長"></label>
-          <label>担当者<input v-model.trim="newTeam.person" placeholder="例：室賀慎太郎"></label>
+          <label>担当者<input v-model.trim="newTeam.person" placeholder="氏名"></label>
         </div>
         <p v-if="messages.new" :class="messages.new.ok ? 'ok' : 'error'">{{ messages.new.text }}</p>
         <button type="submit" :disabled="busy">足す</button>
