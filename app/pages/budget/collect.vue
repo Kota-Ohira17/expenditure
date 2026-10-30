@@ -162,7 +162,7 @@ function cancelRound() {
         <InfoCard
           v-for="c in cards" :key="c.team.id" :to="`/budget/team/${c.team.id}`"
           :status="c.status.label" :tone="c.status.tone"
-          :meta="`${c.team.bureauNo}　入力する人：${c.team.members.map(m => m.name).join('、') || '未割り当て'}`"
+          :meta="`${c.team.bureauNo}　入力する人 ${c.team.members.length ? `${c.team.members.length}人` : '未割り当て'}`"
           :title="`${c.team.bureau} ／ ${c.team.team}`"
           :when="c.last?.updatedAt"
           :note="c.last ? `${itemName(c.last)}${c.last.reviewComment ? `：${c.last.reviewComment}` : ''}` : ''"
