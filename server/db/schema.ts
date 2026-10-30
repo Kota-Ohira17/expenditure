@@ -196,7 +196,7 @@ export const budgetTeams = sqliteTable('budget_teams', {
   bureauNo: text('bureau_no').notNull(),
   bureau: text('bureau').notNull(),
   team: text('team').notNull(),
-  /** 担当者（例: 室賀慎太郎） */
+  /** 担当者の氏名 */
   person: text('person').notNull().default(''),
   sortOrder: real('sort_order').notNull(),
 })
