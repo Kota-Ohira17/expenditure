@@ -3,14 +3,14 @@ import { eq } from 'drizzle-orm'
 /**
  * 明細を消す（その担当の人・財務管理部）。
  * 写してきた明細は「削除する」印を付けるだけ（査定で承認されると、確定したときに予算から消える）。
- * 今回足した明細はそのまま消す。
+ * 今回足した明細と、本予算でコピーした明細はそのまま消す（コピーし直せる）。
  */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const { item, team, round } = await openItemOr404(Number(getRouterParam(event, 'id')))
   await assertCanChangeItem(user, item, team, round)
   const db = useDb()
-  if (item.baseItemId == null) {
+  if (item.baseItemId == null || round.kind === '本予算') {
     await db.delete(schema.budgetItems).where(eq(schema.budgetItems.id, item.id))
     return { removed: true }
   }

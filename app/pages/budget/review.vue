@@ -230,7 +230,7 @@ async function approveAll(ids: number[]) {
               <span v-if="i.preExecution" class="tag fill yellow">予算前執行</span>
               <span v-if="i.deleted" class="tag fill red">削除</span>
             </template>
-            {{ formatYen(i.amount) }}<span v-if="i.baseItemId != null" class="base">（もとの予算 {{ formatYen(i.baseAmount) }}）</span>
+            {{ formatYen(i.amount) }}<span v-if="i.baseItemId != null" class="base">（{{ view?.round.kind === '本予算' ? '昨年' : 'もとの予算' }} {{ formatYen(i.baseAmount) }}）</span>
             <span class="sub">{{ [i.quantity && `数量 ${i.quantity}`, i.unitPrice != null && `単価 ${formatYen(i.unitPrice)}`, i.vendor].filter(Boolean).join('・') }}</span>
             <template v-if="i.status === 'submitted'" #footer>
               <div class="actions">

@@ -121,8 +121,9 @@ function sheetExtras(stored: { role: string, cells: string[], lineKey: string | 
 }
 
 /**
- * 集約を始める：最新の確定した予算の局・担当と明細を写す。
- * 本予算は全明細を担当が確かめて出し直す（未提出から）。補正予算は写した明細を承認済みのままにし、直したものだけ査定する。
+ * 集約を始める：最新の確定した予算の局・担当を写す。
+ * 本予算は明細を空から作る（昨年の予算・決算を参考にし、コピーもできる）。
+ * 補正予算は明細も写し、承認済みのままにして、直したものだけ査定する。
  */
 export async function startRound(kind: BudgetKind, term: string, user: SessionUser) {
   const db = useDb()
@@ -140,6 +141,8 @@ export async function startRound(kind: BudgetKind, term: string, user: SessionUs
     ? await db.insert(schema.budgetTeams).values(baseTeams.map(({ id: _, ...t }) => ({ ...t, roundId: round!.id }))).returning()
     : []
   const teamMap = new Map(baseTeams.map((t, i) => [t.id, newTeams[i]!.id]))
+  // 本予算は明細を写さず空から始める（昨年の予算・決算は担当の画面に参考として出し、そこからコピーして使う）
+  if (kind === '本予算') return round!
 
   const baseItems = await db.select().from(schema.budgetItems)
     .where(and(eq(schema.budgetItems.roundId, base.id), eq(schema.budgetItems.deleted, false)))
@@ -147,9 +150,7 @@ export async function startRound(kind: BudgetKind, term: string, user: SessionUs
     ...b,
     roundId: round!.id,
     teamId: teamMap.get(b.teamId)!,
-    // 本予算は番号を付け直すので、もとの番号は持たない
-    itemNumber: kind === '補正予算' ? b.itemNumber : '',
-    status: kind === '補正予算' ? 'approved' as const : 'draft' as const,
+    status: 'approved' as const,
     reviewComment: '',
     baseItemId: id,
     baseAmount: b.amount,

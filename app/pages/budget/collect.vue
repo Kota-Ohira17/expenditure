@@ -131,13 +131,13 @@ function cancelRound() {
           <template v-if="phase === 'collecting'">
             {{ collecting.round.kind === '補正予算'
               ? '確定した本予算を写しています。変える明細だけを直して提出してください（直していない明細は承認済みのままです）。'
-              : '昨年の予算を写しています。担当ごとに明細を確かめ、直して、すべて提出してください。' }}
+              : '明細は空から作ります。担当の画面に昨年の予算・決算が参考として出るので、使える明細はコピーして直し、すべて提出してください。' }}
           </template>
           <template v-else-if="phase === 'closed'">集約は終了しました。担当はもう入力できません。「査定開始」で査定を始めてください。</template>
           <template v-else>査定中です。要修正になった明細だけ、担当が直して出し直せます。すべて承認したら確定してください。</template>
         </p>
         <p v-if="summary">
-          合計 <strong>{{ formatYen(summary.total) }}</strong>（もとの予算 {{ formatYen(summary.base) }}）・
+          合計 <strong>{{ formatYen(summary.total) }}</strong><template v-if="collecting.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.base) }}）</template>・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <div v-if="reviewer" class="buttons">
@@ -197,7 +197,7 @@ function cancelRound() {
             <span v-if="c.s.submitted" class="tag fill yellow">査定待ち {{ c.s.submitted }}</span>
             <span v-if="c.s.approved" class="tag fill green">承認 {{ c.s.approved }}</span>
           </template>
-          {{ formatYen(c.s.total) }}<span class="base">（もとの予算 {{ formatYen(c.s.base) }}）</span>
+          {{ formatYen(c.s.total) }}<span v-if="collecting.round.kind === '補正予算'" class="base">（もとの予算 {{ formatYen(c.s.base) }}）</span>
         </InfoCard>
       </TeamGroup>
     </template>
@@ -209,7 +209,11 @@ function cancelRound() {
           まだ予算がありません。{{ reviewer ? '「予算」の画面で、もとにする予算（昨年の予算など）を取り込んでから始めてください。' : '財務管理部が予算を用意するまでお待ちください。' }}
         </p>
         <template v-else-if="reviewer">
-          <p class="hint">確定した予算（{{ view.round.term }} {{ view.round.kind }}）をまるごと写して始めます。集約開始 → 集約終了 → 査定開始 → 確定の順に進めます。</p>
+          <p class="hint">
+            確定した予算（{{ view.round.term }} {{ view.round.kind }}）の局・担当を写して始めます。
+            本予算は明細を空から作り、昨年の予算・決算を参考にコピーできます。補正予算は明細も写し、変えるものだけ直します。
+            集約開始 → 集約終了 → 査定開始 → 確定の順に進めます。
+          </p>
           <form class="start" @submit.prevent="startRound">
             <fieldset class="kind">
               <legend>予算の種類</legend>

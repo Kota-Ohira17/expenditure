@@ -72,7 +72,7 @@ const shownEntries = computed(() => (entries.value ?? []).filter(r =>
 
 const DETAIL_LABELS: Record<string, string> = {
   budgetChange: '予算からの変更',
-  budgetCommitteeApproved: '予算委員会の承認',
+  budgetCommitteeApproved: '役員会の承認',
   site: '通販サイト',
   url: '商品ページのリンク',
   deliveryPlace: '配達場所',
