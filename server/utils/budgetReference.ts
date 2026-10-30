@@ -1,77 +1,102 @@
-import { and, asc, desc, eq, gte, inArray } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import type { BudgetRound, BudgetTeam } from '../db/schema'
+import type { SessionUser } from './auth'
 
 /**
- * 本予算の集約で参考にする「昨年の予算・決算」。
- * 予算は集約のもとにした確定済みの予算（補正があれば補正後）の明細、決算はその明細で執行した額（対応済みの申請の執行額の合計）。
- * 担当は局・担当の名前が同じものを昨年の担当とみなす。
+ * 本予算の集約で参考にする「昨年の本予算・決算」。どちらも財務管理部が CSV で取り込む。
+ * - 本予算：「支出」シート（予算の取り込みと同じ形）
+ * - 決算：「支出詳細」シート（MF99_決算の形。このシステムが出す決算シートと同じ）
+ * 担当の画面には、局・担当の名前が同じ明細を出し、決算は項目番号で本予算の明細に合わせる。
  */
 
-/** 決算に数える申請の始まり（昨年の本予算が確定した日。最初に取り込んだ予算なら区切らない） */
-async function termStart(baseRoundId: number) {
+export type ReferenceKind = 'budget' | 'settlement'
+export const REFERENCE_LABELS: Record<ReferenceKind, string> = { budget: '本予算', settlement: '決算' }
+
+/** CSV を読んで、種類ごとに入れ替える */
+export async function importReference(kind: ReferenceKind, fileName: string, data: Uint8Array, user: SessionUser) {
+  const { lines, sheetRows } = parseBudgetRows(parseCsv(decodeCsv(data)))
+  if (!lines.length) {
+    const sheet = kind === 'budget' ? '「支出」シート' : '「支出詳細」シート'
+    throw createError({ statusCode: 400, message: `金額の入った明細が見つかりませんでした。${sheet}の CSV か確認してください。` })
+  }
+  // 仕様・単価・新規・予算前執行は明細（lines）に持たないので、シートの行から拾う
+  const header = sheetRows.find(r => r.role === 'header')?.cells.map(normalizeHeader) ?? []
+  const col = (...names: string[]) => names.map(n => header.indexOf(n)).find(i => i >= 0) ?? -1
+  const c = { spec: col('仕様・詳細', '仕様等', '仕様'), unit: col('単価'), isNew: col('新規'), pre: col('予算前執行') }
+  const extras = new Map(sheetRows.filter(r => r.lineKey).map((r) => {
+    const at = (i: number) => (i >= 0 ? (r.cells[i] ?? '').trim() : '')
+    return [r.lineKey!, { spec: at(c.spec), unitPrice: parseMoney(at(c.unit)), isNew: at(c.isNew) === 'TRUE', preExecution: at(c.pre) === 'TRUE' }]
+  }))
+
+  const rows = lines.map((l, i) => ({
+    kind,
+    sortOrder: i,
+    itemNumber: l.itemNumber,
+    bureau: l.bureau,
+    team: l.team,
+    kan: l.kan,
+    kou: l.kou,
+    moku: l.moku,
+    setsu: l.setsu,
+    quantity: l.quantity,
+    amount: l.budgetAmount,
+    vendor: l.vendor,
+    link: l.link,
+    plannedTiming: l.plannedTiming,
+    remark: l.remark,
+    spec: '',
+    unitPrice: null as number | null,
+    isNew: false,
+    preExecution: false,
+    ...extras.get(l.key),
+  }))
   const db = useDb()
-  const base = await db.query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, baseRoundId) })
-  if (!base) return null
-  const main = base.kind === '本予算'
-    ? base
-    : await db.query.budgetRounds.findFirst({
-        where: and(eq(schema.budgetRounds.kind, '本予算'), eq(schema.budgetRounds.status, 'confirmed')),
-        orderBy: [desc(schema.budgetRounds.confirmedAt)],
-      })
-  return main && main.baseRoundId != null ? main.confirmedAt : null
+  const total = rows.reduce((s, r) => s + r.amount, 0)
+  const CHUNK = 100
+  await db.batch([
+    db.delete(schema.budgetReferences).where(eq(schema.budgetReferences.kind, kind)),
+    ...Array.from({ length: Math.ceil(rows.length / CHUNK) }, (_, i) => db.insert(schema.budgetReferences).values(rows.slice(i * CHUNK, (i + 1) * CHUNK))),
+    db.insert(schema.budgetReferenceFiles)
+      .values({ kind, fileName, count: rows.length, total, importedAt: new Date(), importedBy: user.email })
+      .onConflictDoUpdate({ target: schema.budgetReferenceFiles.kind, set: { fileName, count: rows.length, total, importedAt: new Date(), importedBy: user.email } }),
+  ] as const)
+  return { count: rows.length, total }
 }
 
-/** 項目番号ごとの決算額（対応済みの申請の執行額。執行額が未入力の申請は数えず、件数だけ返す） */
-async function actualsByNumber(since: Date | null) {
-  const db = useDb()
-  const entries = await db.select().from(schema.entries)
-    .where(since ? and(eq(schema.entries.status, 'done'), gte(schema.entries.createdAt, since)) : eq(schema.entries.status, 'done'))
-  if (!entries.length) return new Map<string, { amount: number, unknown: number }>()
-  const items = await db.select().from(schema.entryItems).where(inArray(schema.entryItems.entryId, entries.map(e => e.id)))
-  const itemsOf = new Map<number, typeof items>()
-  for (const i of items) itemsOf.set(i.entryId, [...(itemsOf.get(i.entryId) ?? []), i])
-  const result = new Map<string, { amount: number, unknown: number }>()
-  const add = (no: string, amount: number | null) => {
-    const r = result.get(no) ?? { amount: 0, unknown: 0 }
-    if (amount == null) r.unknown++
-    else r.amount += amount
-    result.set(no, r)
-  }
-  for (const e of entries) {
-    const list = itemsOf.get(e.id) ?? []
-    if (!list.length) add(e.itemNumber, e.amount)
-    for (const i of list) add(i.itemNumber, actualAmountOf(i, { ...e, items: list }))
-  }
-  return result
+/** 取り込んだファイルの一覧（だれが取り込んだかは出さない） */
+export async function referenceFiles() {
+  const files = await useDb().select().from(schema.budgetReferenceFiles)
+  return files.map(({ importedBy: _b, ...f }) => f)
 }
 
-/** その担当の昨年の明細と決算額。集約していない・もとの予算がないときは null */
-export async function referenceFor(round: Pick<BudgetRound, 'id' | 'baseRoundId'>, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
-  if (round.baseRoundId == null) return null
+/**
+ * その担当の昨年の本予算の明細と、決算額。
+ * 決算は項目番号で本予算の明細に合わせる（同じ番号が複数あれば、その番号の決算の合計を最初の明細に付ける）。
+ * 本予算にない番号の決算は「予算外の決算」として並べる（これもコピーできる）。
+ */
+export async function referenceFor(round: Pick<BudgetRound, 'id'>, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
   const db = useDb()
-  const [baseRound, baseTeam] = await Promise.all([
-    db.query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, round.baseRoundId) }),
-    db.query.budgetTeams.findFirst({
-      where: and(eq(schema.budgetTeams.roundId, round.baseRoundId), eq(schema.budgetTeams.bureau, team.bureau), eq(schema.budgetTeams.team, team.team)),
-    }),
+  const [rows, copied, files] = await Promise.all([
+    db.select().from(schema.budgetReferences)
+      .where(and(eq(schema.budgetReferences.bureau, team.bureau), eq(schema.budgetReferences.team, team.team)))
+      .orderBy(asc(schema.budgetReferences.kind), asc(schema.budgetReferences.sortOrder)),
+    db.select({ referenceId: schema.budgetItems.referenceId }).from(schema.budgetItems).where(eq(schema.budgetItems.roundId, round.id)),
+    referenceFiles(),
   ])
-  if (!baseRound) return null
-  if (!baseTeam) return { round: baseRound, items: [] }
-  const [items, copied, actuals] = await Promise.all([
-    db.select().from(schema.budgetItems)
-      .where(and(eq(schema.budgetItems.teamId, baseTeam.id), eq(schema.budgetItems.deleted, false)))
-      .orderBy(asc(schema.budgetItems.sortOrder)),
-    db.select({ baseItemId: schema.budgetItems.baseItemId }).from(schema.budgetItems).where(eq(schema.budgetItems.roundId, round.id)),
-    termStart(round.baseRoundId).then(actualsByNumber),
-  ])
-  const copiedIds = new Set(copied.map(c => c.baseItemId))
-  return {
-    round: baseRound,
-    items: items.map(({ roundId: _r, updatedBy: _u, status: _s, reviewComment: _c, ...i }) => ({
-      ...i,
-      actual: actuals.get(i.itemNumber)?.amount ?? 0,
-      actualUnknown: actuals.get(i.itemNumber)?.unknown ?? 0,
-      copied: copiedIds.has(i.id),
-    })),
-  }
+  const copiedIds = new Set(copied.map(c => c.referenceId))
+  const budget = rows.filter(r => r.kind === 'budget')
+  const settlement = rows.filter(r => r.kind === 'settlement')
+  const actualBy = new Map<string, number>()
+  for (const s of settlement) actualBy.set(s.itemNumber, (actualBy.get(s.itemNumber) ?? 0) + s.amount)
+  const given = new Set<string>()
+  const items = budget.map((b) => {
+    // 同じ番号の明細が複数あるときは、決算は最初の明細にまとめて付ける
+    const actual = given.has(b.itemNumber) ? null : (actualBy.get(b.itemNumber) ?? 0)
+    given.add(b.itemNumber)
+    return { ...b, budget: b.amount, actual, outside: false, copied: copiedIds.has(b.id) }
+  })
+  const budgetNumbers = new Set(budget.map(b => b.itemNumber))
+  const outside = settlement.filter(s => !budgetNumbers.has(s.itemNumber))
+    .map(s => ({ ...s, budget: null, actual: s.amount, outside: true, copied: copiedIds.has(s.id) }))
+  return { files, items: [...items, ...outside] }
 }

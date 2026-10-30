@@ -234,6 +234,8 @@ export const budgetItems = sqliteTable('budget_items', {
   /** 写したもとの明細と、その金額（差額を出すため）。新しい明細は null */
   baseItemId: integer('base_item_id'),
   baseAmount: integer('base_amount'),
+  /** 取り込んだ昨年の本予算・決算（budget_references）からコピーした明細なら、そのもとの行 */
+  referenceId: integer('reference_id'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   updatedBy: text('updated_by').notNull(),
 })
@@ -274,3 +276,41 @@ export const budgetChanges = sqliteTable('budget_changes', {
 })
 
 export type BudgetChange = typeof budgetChanges.$inferSelect
+
+/**
+ * 本予算の集約で参考にする、取り込んだ昨年の本予算・決算の明細。
+ * 本予算は「支出」シート、決算は「支出詳細」シートの CSV から取り込む。種類ごとに、取り込み直すと入れ替える。
+ */
+export const BUDGET_REFERENCE_KINDS = ['budget', 'settlement'] as const
+export const budgetReferences = sqliteTable('budget_references', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind', { enum: BUDGET_REFERENCE_KINDS }).notNull(),
+  sortOrder: integer('sort_order').notNull(),
+  itemNumber: text('item_number').notNull().default(''),
+  bureau: text('bureau').notNull().default(''),
+  team: text('team').notNull().default(''),
+  kan: text('kan').notNull().default(''),
+  kou: text('kou').notNull().default(''),
+  moku: text('moku').notNull().default(''),
+  setsu: text('setsu').notNull().default(''),
+  quantity: text('quantity').notNull().default(''),
+  unitPrice: integer('unit_price'),
+  amount: integer('amount').notNull(),
+  vendor: text('vendor').notNull().default(''),
+  spec: text('spec').notNull().default(''),
+  link: text('link').notNull().default(''),
+  plannedTiming: text('planned_timing').notNull().default(''),
+  remark: text('remark').notNull().default(''),
+  isNew: integer('is_new', { mode: 'boolean' }).notNull().default(false),
+  preExecution: integer('pre_execution', { mode: 'boolean' }).notNull().default(false),
+})
+
+/** 取り込んだ昨年の本予算・決算のファイル（種類ごとに1つ） */
+export const budgetReferenceFiles = sqliteTable('budget_reference_files', {
+  kind: text('kind', { enum: BUDGET_REFERENCE_KINDS }).primaryKey(),
+  fileName: text('file_name').notNull(),
+  count: integer('count').notNull(),
+  total: integer('total').notNull(),
+  importedAt: integer('imported_at', { mode: 'timestamp_ms' }).notNull(),
+  importedBy: text('imported_by').notNull(),
+})

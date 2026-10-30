@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 
-/** 担当の画面に出す「昨年の予算・決算」（本予算の集約のときの参考。コピーして使える） */
+/** 担当の画面に出す「昨年の本予算・決算」（取り込んだもの。本予算の集約のときだけ。コピーして使える） */
 export default defineEventHandler(async (event) => {
   await requireUser(event)
   const team = await useDb().query.budgetTeams.findFirst({ where: eq(schema.budgetTeams.id, Number(getRouterParam(event, 'id'))) })

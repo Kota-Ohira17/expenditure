@@ -2,7 +2,7 @@
 /**
  * 担当の予算の明細。その担当の人（と財務管理部）は、明細を直す・足す・消すことができ、終わったら提出する。
  * 担当の人が直せるのは、集約中は査定待ち以外、査定中は要修正の明細だけ。集約終了のあとは直せない（財務管理部は確定までいつでも）。
- * 本予算は空から作り、「昨年の予算・決算（参考）」から明細をコピーできる（1件・款ごと・すべて）。
+ * 本予算は空から作り、「昨年の本予算・決算（参考）」（財務管理部が取り込んだもの）から明細をコピーできる（1件・款ごと・すべて）。
  * 補正予算で写してきた明細を消すと「削除」の印が付き、査定で承認されると確定したときに予算から消える。
  * ほかの人は見るだけ。
  */
@@ -33,13 +33,24 @@ const kanNames = computed(() => kans.value.map(k => k.kan).filter(Boolean))
 const folded = reactive(new Set<string>())
 const toggle = (kan: string) => (folded.has(kan) ? folded.delete(kan) : folded.add(kan))
 
-/** 昨年の予算・決算（本予算の集約のときの参考。1件・款ごと・すべてをコピーできる） */
+/** 昨年の本予算・決算（財務管理部が取り込んだもの。本予算の集約のときの参考。1件・款ごと・すべてをコピーできる） */
 const { data: reference, refresh: refreshReference } = await useFetch(`/api/budget/teams/${teamId}/reference`)
 type RefItem = NonNullable<NonNullable<typeof reference.value>>['items'][number]
+const refFile = (kind: 'budget' | 'settlement') => reference.value?.files.find(f => f.kind === kind)
+/** 款ごとにまとめる。予算外の決算は最後に1つにまとめる */
 const refKans = computed(() => {
   const groups = new Map<string, RefItem[]>()
-  for (const i of reference.value?.items ?? []) groups.set(i.kan, [...(groups.get(i.kan) ?? []), i])
-  return [...groups].map(([kan, list]) => ({ kan, list, budget: list.reduce((s, i) => s + i.amount, 0), actual: list.reduce((s, i) => s + i.actual, 0) }))
+  for (const i of reference.value?.items ?? []) {
+    const key = i.outside ? '\u0000' : i.kan
+    groups.set(key, [...(groups.get(key) ?? []), i])
+  }
+  return [...groups].map(([key, list]) => ({
+    key,
+    kan: key === '\u0000' ? '予算外の決算' : key,
+    list,
+    budget: list.reduce((s, i) => s + (i.budget ?? 0), 0),
+    actual: list.reduce((s, i) => s + (i.actual ?? 0), 0),
+  }))
 })
 const refTotal = computed(() => refKans.value.reduce((s, k) => ({ budget: s.budget + k.budget, actual: s.actual + k.actual }), { budget: 0, actual: 0 }))
 const notCopied = (list: RefItem[]) => list.filter(i => !i.copied).map(i => i.id)
@@ -79,7 +90,7 @@ const save = (value: BudgetItemInput) => run(() => editing.value === 'new'
   ? $fetch(`/api/budget/teams/${teamId}/items`, { method: 'POST', body: value })
   : $fetch(`/api/budget/items/${editing.value}`, { method: 'PATCH', body: value }), '保存しました。提出するまで査定には回りません。')
 function remove(i: BudgetItemView) {
-  const text = i.baseItemId == null ? 'この明細を消します。' : 'この明細に「削除」の印を付けます（査定で承認されると、確定したときに予算から消えます）。'
+  const text = i.baseItemId == null || view.value?.round.kind === '本予算' ? 'この明細を消します。' : 'この明細に「削除」の印を付けます（査定で承認されると、確定したときに予算から消えます）。'
   if (confirm(`${itemName(i)}\n${text}よろしいですか？`)) run(() => $fetch(`/api/budget/items/${i.id}`, { method: 'DELETE' }))
 }
 const restore = (i: BudgetItemView) => run(() => $fetch(`/api/budget/items/${i.id}/restore`, { method: 'POST' }))
@@ -130,8 +141,8 @@ function addTo(kan: string) {
             <AppIcon name="chevron-down" />
           </button>
           <div class="ref-title">
-            <h2>昨年の予算・決算（参考）</h2>
-            <span class="muted">{{ reference.round.term }} {{ reference.round.kind }}・予算 {{ formatYen(refTotal.budget) }} ／ 決算 {{ formatYen(refTotal.actual) }}</span>
+            <h2>昨年の本予算・決算（参考）</h2>
+            <span class="muted">予算 {{ formatYen(refTotal.budget) }} ／ 決算 {{ formatYen(refTotal.actual) }}</span>
           </div>
           <button
             v-if="canAdd && notCopied(reference.items).length" class="secondary" :disabled="pending"
@@ -141,9 +152,13 @@ function addTo(kan: string) {
           </button>
         </header>
         <div v-if="refOpen" class="ref-body">
-          <p class="hint">昨年の明細です。そのまま使える明細はコピーして、直してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は、対応済みの執行依頼の執行額の合計です。</p>
-          <p v-if="!reference.items.length" class="hint">昨年の予算に、この担当の明細はありません。</p>
-          <div v-for="k in refKans" :key="k.kan" class="kan">
+          <p class="hint">
+            財務管理部が取り込んだ昨年の本予算と決算です（本予算：{{ refFile('budget')?.fileName || '未取り込み' }} ／ 決算：{{ refFile('settlement')?.fileName || '未取り込み' }}）。
+            使える明細はコピーして、直してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は項目番号で本予算の明細に合わせています。
+          </p>
+          <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。財務管理部が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
+          <p v-else-if="!reference.items.length" class="hint">取り込んだ本予算・決算に、この担当（{{ team.bureau }} ／ {{ team.team }}）の明細はありません。</p>
+          <div v-for="k in refKans" :key="k.key" class="kan">
             <div class="kan-head">
               <h3>{{ k.kan || '（款なし）' }}</h3>
               <span class="muted">予算 {{ formatYen(k.budget) }} ／ 決算 {{ formatYen(k.actual) }}</span>
@@ -159,11 +174,8 @@ function addTo(kan: string) {
                     <td class="no">{{ i.itemNumber }}</td>
                     <td>{{ itemName(i) }}<small v-if="i.spec" class="muted spec">{{ i.spec }}</small></td>
                     <td>{{ i.quantity }}</td>
-                    <td class="num">{{ formatYen(i.amount) }}</td>
-                    <td class="num">
-                      {{ formatYen(i.actual) }}
-                      <small v-if="i.actualUnknown" class="muted spec">執行額未入力 {{ i.actualUnknown }}件</small>
-                    </td>
+                    <td class="num">{{ i.budget == null ? '—' : formatYen(i.budget) }}</td>
+                    <td class="num">{{ i.actual == null ? '（上にまとめて）' : formatYen(i.actual) }}</td>
                     <td>{{ i.vendor }}</td>
                     <td class="actions">
                       <span v-if="i.copied" class="muted">コピー済み</span>
@@ -244,7 +256,7 @@ function addTo(kan: string) {
 .fold:hover:not(:disabled) { background: var(--accent-bg); }
 .fold :deep(.app-icon) { transition: transform .15s; }
 .kan.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
-/* 昨年の予算・決算（参考）：本体の明細と見分けられるよう、点線の枠で囲む */
+/* 昨年の本予算・決算（参考）：本体の明細と見分けられるよう、点線の枠で囲む */
 .reference { margin: 1rem 0 1.6rem; border: 1.5px dashed var(--border); border-radius: 12px; background: var(--panel); }
 .ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; cursor: pointer; user-select: none; }
 .ref-title { flex: 1 1 14rem; display: grid; }
@@ -254,7 +266,7 @@ function addTo(kan: string) {
 .ref-body { padding: 0 .8rem .8rem; }
 .ref-body .kan { margin: .8rem 0; }
 .ref-body h3 { font-size: .95rem; margin: 0; }
-.items.ref { min-width: 44rem; }
+.items.ref { min-width: 40rem; }
 .table-wrap { overflow-x: auto; }
 .items { border-collapse: collapse; width: 100%; min-width: 52rem; background: var(--surface); }
 .items th, .items td { padding: .4rem .55rem; border-bottom: 1px solid var(--border); text-align: left; font-size: .88rem; vertical-align: top; }

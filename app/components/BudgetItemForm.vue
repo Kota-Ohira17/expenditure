@@ -52,24 +52,24 @@ function onSubmit() {
   <form class="item-form" @submit.prevent="onSubmit">
     <div class="names">
       <label><span>款<span class="req">*</span></span>
-        <input v-model.trim="form.kan" :list="listId" required placeholder="例：レンタカー関連費">
+        <input v-model.trim="form.kan" :list="listId" required>
         <datalist :id="listId"><option v-for="k in kans" :key="k" :value="k" /></datalist>
       </label>
-      <label>項<input v-model.trim="form.kou" placeholder="例：プチ資材移動"></label>
-      <label>目<input v-model.trim="form.moku" placeholder="例：バン"></label>
-      <label>節<input v-model.trim="form.setsu" placeholder="例：レンタカー代"></label>
+      <label>項<input v-model.trim="form.kou"></label>
+      <label>目<input v-model.trim="form.moku"></label>
+      <label>節<input v-model.trim="form.setsu"></label>
     </div>
     <p class="hint">項・目・節は、どれか1つ以上に名前を入れてください。</p>
     <div class="numbers">
-      <label>数量<input v-model.trim="form.quantity" class="w-s" placeholder="例：1"></label>
-      <label>単価（円）<YenInput v-model="form.unitPrice" class="w-s" placeholder="例：14900" /></label>
-      <label><span>金額（円）<span class="req">*</span></span><YenInput v-model="form.amount" class="w-s" required placeholder="例：14900" @input="autoAmount = false" /></label>
-      <label>取引先<input v-model.trim="form.vendor" placeholder="例：トヨタレンタカー"></label>
+      <label>数量<input v-model.trim="form.quantity" class="w-s"></label>
+      <label>単価（円）<YenInput v-model="form.unitPrice" class="w-s" /></label>
+      <label><span>金額（円）<span class="req">*</span></span><YenInput v-model="form.amount" class="w-s" required @input="autoAmount = false" /></label>
+      <label>取引先<input v-model.trim="form.vendor"></label>
     </div>
     <div class="numbers">
-      <label>仕様・詳細<input v-model.trim="form.spec" placeholder="例：V3・~12h"></label>
-      <label>執行予定時期<input v-model.trim="form.plannedTiming" class="w-s" placeholder="例：4月"></label>
-      <label>リンク<input v-model.trim="form.link" type="url" placeholder="https://…"></label>
+      <label>仕様・詳細<input v-model.trim="form.spec"></label>
+      <label>執行予定時期<input v-model.trim="form.plannedTiming" class="w-s"></label>
+      <label>リンク<input v-model.trim="form.link" type="url"></label>
     </div>
     <label>備考<textarea v-model.trim="form.remark" rows="2" /></label>
     <div class="checks">
