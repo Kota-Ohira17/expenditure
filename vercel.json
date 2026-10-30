@@ -1,5 +1,6 @@
 {
   "buildCommand": "npm run build:vercel",
+  "regions": ["hnd1"],
   "crons": [
     { "path": "/api/cron/overdue-reminder", "schedule": "0 0 * * *" }
   ]
