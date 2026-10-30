@@ -83,8 +83,10 @@ async function review(id: number, decision: 'approve' | 'return') {
   busy.value = id
   delete errors[id]
   try {
-    await $fetch(`/api/budget/items/${id}/review`, { method: 'POST', body: { decision, comment: comments[id] ?? '' } })
-    await refresh()
+    const updated = await $fetch(`/api/budget/items/${id}/review`, { method: 'POST', body: { decision, comment: comments[id] ?? '' } })
+    // 全件を取り直さず、手元の明細だけ書き換える（番号は状態では変わらない）
+    const item = view.value?.items.find(i => i.id === id)
+    if (item && updated) Object.assign(item, { status: updated.status, reviewComment: updated.reviewComment, updatedAt: updated.updatedAt })
   }
   catch (error) {
     errors[id] = toMessages(error)
@@ -95,8 +97,18 @@ async function review(id: number, decision: 'approve' | 'return') {
 }
 /** その担当の査定待ちをまとめて承認する */
 async function approveAll(ids: number[]) {
-  if (!confirm(`${ids.length}件をまとめて承認します。よろしいですか？`)) return
-  for (const id of ids) await review(id, 'approve')
+  if (!view.value || !confirm(`${ids.length}件をまとめて承認します。よろしいですか？`)) return
+  busy.value = -1
+  try {
+    await $fetch(`/api/budget/rounds/${view.value.round.id}/approve`, { method: 'POST', body: { ids } })
+    await refresh()
+  }
+  catch (error) {
+    alert(toMessages(error).join('\n'))
+  }
+  finally {
+    busy.value = null
+  }
 }
 </script>
 

@@ -166,6 +166,11 @@ export const budgetItemSchema = z.object({
 export type BudgetItemInput = z.input<typeof budgetItemSchema>
 
 /** 査定（財務管理部）：承認か、要修正（理由を書く） */
+/** 査定待ちの明細をまとめて承認する（査定の「まとめて承認」） */
+export const budgetApproveSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(5000),
+})
+
 export const budgetReviewSchema = z.object({
   decision: z.enum(['approve', 'return']),
   comment: z.string().trim().max(1000).default(''),
