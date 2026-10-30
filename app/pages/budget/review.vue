@@ -2,7 +2,8 @@
 /**
  * 査定（財務管理部）。査定待ちの明細を担当ごとに並べ、明細ごとに承認するか、理由を書いて担当に戻す（要修正）。
  * もとの予算（昨年・本予算）からの変わり方も並べて見られる。
- * 上部：「新規登録」（財務管理部が明細を足す。そのまま承認済みにもできる）、検索、状態の件数と絞り込み。
+ * 上部：「新規登録」（財務管理部が明細を足す。そのまま承認済みにもできる）、局ごとのタブ、検索、状態の件数と絞り込み。
+ * 担当ごとのまとまりは、はじめは折りたたんでおく（見出しを押すと開く）。
  */
 import type { BudgetItemInput } from '#shared/schemas'
 const { can } = usePermissions()
@@ -31,9 +32,10 @@ const teamById = computed(() => new Map((view.value?.teams ?? []).map(t => [t.id
 const bureaus = computed(() => [...new Set((view.value?.teams ?? []).map(t => t.bureau))])
 const teamOptions = computed(() => (view.value?.teams ?? []).filter(t => !bureau.value || t.bureau === bureau.value))
 watch(bureau, () => { teamId.value = '' })
-function matches(i: BudgetItemView) {
+/** 局のタブ以外の絞り込み・検索に当てはまるか（局は withBureau のときだけ見る。タブの件数は局を見ずに数える） */
+function matches(i: BudgetItemView, withBureau = true) {
   const t = teamById.value.get(i.teamId)
-  if (bureau.value && t?.bureau !== bureau.value) return false
+  if (withBureau && bureau.value && t?.bureau !== bureau.value) return false
   if (teamId.value !== '' && i.teamId !== teamId.value) return false
   if (change.value === 'new' && i.baseItemId != null) return false
   if (change.value === 'deleted' && !i.deleted) return false
@@ -44,7 +46,13 @@ function matches(i: BudgetItemView) {
   const text = [i.number, i.kan, itemName(i), i.vendor, i.spec, i.remark, t?.bureau, t?.team].join(' ').toLowerCase()
   return words.every(w => text.includes(w))
 }
-const narrowed = computed(() => (collecting.value ? view.value!.items.filter(matches) : []))
+const narrowed = computed(() => (collecting.value ? view.value!.items.filter(i => matches(i)) : []))
+/** 局ごとのタブ（件数は、今の状態・検索・絞り込みに当てはまる明細の数） */
+const bureauTabs = computed(() => {
+  const list = collecting.value ? view.value!.items.filter(i => inFilter(i, filter.value) && matches(i, false)) : []
+  const n = (b: string) => list.filter(i => teamById.value.get(i.teamId)?.bureau === b).length
+  return [{ key: '', label: 'すべて', count: list.length }, ...bureaus.value.map(b => ({ key: b, label: b, count: n(b) }))]
+})
 const count = (f: Filter) => narrowed.value.filter(i => inFilter(i, f)).length
 const shown = computed(() => narrowed.value.filter(i => inFilter(i, filter.value)))
 
@@ -81,15 +89,15 @@ const PAGE = 20
 const limits = reactive<Record<number, number>>({})
 const limitOf = (teamId: number) => limits[teamId] ?? PAGE
 const showMore = (teamId: number) => { limits[teamId] = limitOf(teamId) + PAGE }
-/** 折りたたんだ担当（見出しの帯を押すと開け閉めできる） */
-const folded = reactive(new Set<number>())
-const toggle = (teamId: number) => (folded.has(teamId) ? folded.delete(teamId) : folded.add(teamId))
-const allFolded = computed(() => groups.value.length > 0 && groups.value.every(g => folded.has(g.team.id)))
+/** 開いている担当（はじめはすべて折りたたむ。見出しの帯を押すと開け閉めできる） */
+const opened = reactive(new Set<number>())
+const toggle = (teamId: number) => (opened.has(teamId) ? opened.delete(teamId) : opened.add(teamId))
+const allOpen = computed(() => groups.value.length > 0 && groups.value.every(g => opened.has(g.team.id)))
 function toggleAll() {
-  const fold = !allFolded.value
+  const open = !allOpen.value
   for (const g of groups.value) {
-    if (fold) folded.add(g.team.id)
-    else folded.delete(g.team.id)
+    if (open) opened.add(g.team.id)
+    else opened.delete(g.team.id)
   }
 }
 watch([filter, query, bureau, teamId, change, flag], () => {
@@ -165,6 +173,7 @@ async function approveAll(ids: number[]) {
         : '今は集約していません。「集約」の画面で集約開始 → 集約終了 → 査定開始の順に進めると、査定できます。' }}
     </p>
     <template v-else>
+      <BureauTabs v-model="bureau" :tabs="bureauTabs" />
       <label class="search">
         <AppIcon name="search" />
         <input v-model="query" type="search" placeholder="査定を検索（項目番号・名前・担当・取引先・備考）" aria-label="査定を検索">
@@ -180,7 +189,6 @@ async function approveAll(ids: number[]) {
           </button>
         </div>
         <div class="drops">
-          <select v-model="bureau" aria-label="局"><option value="">局</option><option v-for="b in bureaus" :key="b" :value="b">{{ b }}</option></select>
           <select v-model="teamId" aria-label="担当"><option value="">担当</option><option v-for="t in teamOptions" :key="t.id" :value="t.id">{{ t.team }}</option></select>
           <select v-model="change" aria-label="変わり方">
             <option value="">変わり方</option><option value="plus">増額</option><option value="minus">減額</option><option value="new">新規の明細</option><option value="deleted">削除</option>
@@ -191,31 +199,24 @@ async function approveAll(ids: number[]) {
         </div>
       </div>
       <div v-if="groups.length > 1" class="fold-all">
-        <button class="link" @click="toggleAll">{{ allFolded ? 'すべて開く' : 'すべて折りたたむ' }}</button>
+        <button class="link" @click="toggleAll">{{ allOpen ? 'すべて折りたたむ' : 'すべて開く' }}</button>
       </div>
       <p v-if="!shown.length" class="hint">{{ filter === 'submitted' ? '査定待ちの明細はありません。担当が明細を提出すると、ここに並びます。' : '該当する明細はありません。' }}</p>
 
-      <section v-for="g in groups" :key="g.team.id" class="group" :class="{ folded: folded.has(g.team.id) }">
-        <header class="group-head" @click.self="toggle(g.team.id)">
-          <button
-            class="fold" :aria-expanded="!folded.has(g.team.id)" :aria-label="folded.has(g.team.id) ? '開く' : '折りたたむ'"
-            @click="toggle(g.team.id)"
-          >
-            <AppIcon name="chevron-down" />
-          </button>
-          <div class="group-name" @click="toggle(g.team.id)">
-            <span class="group-bureau">{{ g.team.bureau }}</span>
-            <h2><NuxtLink :to="`/budget/team/${g.team.id}`" @click.stop>{{ g.team.team }}</NuxtLink></h2>
-          </div>
-          <div class="group-stats" @click="toggle(g.team.id)">
-            <span><strong>{{ g.list.length }}</strong>件</span>
-            <span>合計 <strong>{{ formatYen(g.total) }}</strong></span>
-          </div>
-          <button v-if="filter === 'submitted'" class="secondary" :disabled="busy !== null" @click="approveAll(g.list.map(i => i.id))">
+      <TeamGroup
+        v-for="g in groups" :key="g.team.id" :bureau="g.team.bureau" :team="g.team.team" :to="`/budget/team/${g.team.id}`"
+        :open="opened.has(g.team.id)" @toggle="toggle(g.team.id)"
+      >
+        <template #stats>
+          <span><strong>{{ g.list.length }}</strong>件</span>
+          <span>合計 <strong>{{ formatYen(g.total) }}</strong></span>
+        </template>
+        <template v-if="filter === 'submitted'" #actions>
+          <button class="secondary" :disabled="busy !== null" @click="approveAll(g.list.map(i => i.id))">
             まとめて承認（{{ g.list.length }}件）
           </button>
-        </header>
-        <div v-show="!folded.has(g.team.id)" class="card-list">
+        </template>
+        <div class="card-list">
           <InfoCard
             v-for="i in g.visible" :key="i.id"
             :status="itemStatusLabel(i)" :tone="STATUS_TONE[i.status]"
@@ -241,11 +242,11 @@ async function approveAll(ids: number[]) {
             </template>
           </InfoCard>
         </div>
-        <div v-if="!folded.has(g.team.id) && g.list.length > g.visible.length" class="more">
+        <div v-if="g.list.length > g.visible.length" class="more">
           <span class="muted">{{ g.visible.length }} / {{ g.list.length }}件を表示</span>
           <button class="secondary" @click="showMore(g.team.id)">もっと見る（次の{{ Math.min(PAGE, g.list.length - g.visible.length) }}件）</button>
         </div>
-      </section>
+      </TeamGroup>
     </template>
   </section>
 </template>
@@ -269,24 +270,8 @@ async function approveAll(ids: number[]) {
 .drops { display: flex; flex-wrap: wrap; gap: .2rem .4rem; }
 .drops select { width: auto; border: none; background: transparent; font-size: .85rem; padding: .25rem 1.4rem .25rem .4rem; max-width: 11rem; cursor: pointer; }
 .drops select:hover { background: var(--accent-bg); border-radius: 6px; }
-/* 担当ごとのまとまり：枠で囲み、見出しの帯に担当名・件数・合計 */
-.group { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow: hidden; }
-.group-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.2rem; padding: .7rem 1rem; background: var(--accent-bg); border-bottom: 1px solid var(--border); border-left: 5px solid var(--accent); }
-.group-head { cursor: pointer; user-select: none; }
-.group.folded .group-head { border-bottom: none; }
-.fold { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--text); }
-.fold:hover:not(:disabled) { background: var(--accent-bg-hover); }
-.fold :deep(.app-icon) { transition: transform .15s; }
-.group.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
-.fold-all { display: flex; justify-content: flex-end; margin-bottom: -.6rem; font-size: .85rem; }
-.group-name { display: grid; flex: 1 1 12rem; }
-.group-bureau { font-size: .78rem; color: var(--muted); }
-.group-head h2 { font-size: 1.1rem; margin: 0; }
-.group-head h2 a { color: inherit; }
-.group-stats { display: flex; gap: 1rem; font-size: .85rem; color: var(--muted); white-space: nowrap; }
-.group-stats strong { color: var(--text); }
-.group .card-list { padding: .8rem; }
-.more { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .4rem 1rem; padding: 0 .8rem .9rem; font-size: .85rem; }
+.fold-all { display: flex; justify-content: flex-end; margin-bottom: .4rem; font-size: .85rem; }
+.more { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .4rem 1rem; padding-top: .8rem; font-size: .85rem; }
 .base { font-weight: 400; color: var(--muted); margin-left: .3rem; font-size: .85rem; }
 .sub { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: .2rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }

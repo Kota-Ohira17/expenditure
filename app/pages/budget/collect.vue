@@ -2,6 +2,7 @@
 /**
  * 集約。確定していない集約があれば、段階（集約中 → 集約終了 → 査定中）と担当ごとの進み具合、自分の担当への入口。
  * 財務管理部は段階を進める：集約中は「すべて提出」「集約終了」、集約終了は「査定開始」、査定中は「すべて承認」「確定」。
+ * 担当ごとの進み具合は、局ごとのタブで絞り、担当の枠ははじめは折りたたんでおく（見出しを押すと開く）。
  * 集約していないときは、財務管理部には次の集約を始めるフォーム（最新の確定した予算を写して始める）。
  */
 const { can } = usePermissions()
@@ -30,6 +31,25 @@ const cards = computed(() => (collecting.value?.teams ?? [])
   .map(t => ({ team: t, ...teamCard(t) }))
   .sort((a, b) => Number(!!b.mine) - Number(!!a.mine) || order[a.status.tone] - order[b.status.tone]))
 const summary = computed(() => (collecting.value ? teamSummary(collecting.value.items) : null))
+/** 局ごとのタブ（件数は担当の数） */
+const bureau = ref('')
+const bureauTabs = computed(() => {
+  const teams = collecting.value?.teams ?? []
+  const bureaus = [...new Set(teams.map(t => t.bureau))]
+  return [{ key: '', label: 'すべて', count: teams.length }, ...bureaus.map(b => ({ key: b, label: b, count: teams.filter(t => t.bureau === b).length }))]
+})
+const shownCards = computed(() => cards.value.filter(c => !bureau.value || c.team.bureau === bureau.value))
+/** 開いている担当（はじめはすべて折りたたむ） */
+const opened = reactive(new Set<number>())
+const toggle = (teamId: number) => (opened.has(teamId) ? opened.delete(teamId) : opened.add(teamId))
+const allOpen = computed(() => shownCards.value.length > 0 && shownCards.value.every(c => opened.has(c.team.id)))
+function toggleAll() {
+  const open = !allOpen.value
+  for (const c of shownCards.value) {
+    if (open) opened.add(c.team.id)
+    else opened.delete(c.team.id)
+  }
+}
 /** 自分が割り当てられた担当（財務管理部はどの担当も直せるので、一覧から入る） */
 const myTeams = computed(() => (collecting.value && !reviewer.value ? collecting.value.teams.filter(t => collecting.value!.editableTeamIds.includes(t.id)) : []))
 
@@ -148,9 +168,21 @@ function cancelRound() {
       <p v-else-if="!reviewer" class="hint">あなたはまだ担当に割り当てられていません。財務管理部に、入力する担当を割り当ててもらってください。</p>
 
       <h2>担当ごとの進み具合</h2>
-      <div class="card-list">
+      <BureauTabs v-model="bureau" :tabs="bureauTabs" />
+      <div v-if="shownCards.length > 1" class="fold-all">
+        <button class="link" @click="toggleAll">{{ allOpen ? 'すべて折りたたむ' : 'すべて開く' }}</button>
+      </div>
+      <TeamGroup
+        v-for="c in shownCards" :key="c.team.id" :bureau="c.team.bureau" :team="c.team.team" :to="`/budget/team/${c.team.id}`"
+        :open="opened.has(c.team.id)" @toggle="toggle(c.team.id)"
+      >
+        <template #stats>
+          <span class="status-pill" :class="c.status.tone">{{ c.status.label }}</span>
+          <span v-if="c.mine" class="tag">あなたの担当</span>
+          <span>合計 <strong>{{ formatYen(c.s.total) }}</strong></span>
+        </template>
         <InfoCard
-          v-for="c in cards" :key="c.team.id" :to="`/budget/team/${c.team.id}`"
+          :to="`/budget/team/${c.team.id}`"
           :status="c.status.label" :tone="c.status.tone"
           :meta="`${c.team.bureauNo}　入力する人 ${c.team.members.length ? `${c.team.members.length}人` : '未割り当て'}`"
           :title="`${c.team.bureau} ／ ${c.team.team}`"
@@ -167,7 +199,7 @@ function cancelRound() {
           </template>
           {{ formatYen(c.s.total) }}<span class="base">（もとの予算 {{ formatYen(c.s.base) }}）</span>
         </InfoCard>
-      </div>
+      </TeamGroup>
     </template>
 
     <template v-else>
@@ -202,6 +234,12 @@ h2 { font-size: 1.1rem; }
 .kind { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
 .team-links { margin: 0; padding-left: 1.2rem; display: grid; gap: .4rem; }
 .submit-team { margin-left: .8rem; padding: .3rem .7rem; font-size: .85rem; }
+.fold-all { display: flex; justify-content: flex-end; margin-bottom: .4rem; font-size: .85rem; }
+.status-pill { font-size: .75rem; font-weight: 700; padding: .15rem .6rem; border-radius: 999px; white-space: nowrap; }
+.status-pill.gray { background: #ecebe8; color: #5f5a55; }
+.status-pill.yellow { background: #fbf0d4; color: #8a6200; }
+.status-pill.red { background: #fbe4e4; color: #b42318; }
+.status-pill.green { background: #dff1e3; color: #1e6b34; }
 .base { font-weight: 400; color: var(--muted); margin-left: .3rem; font-size: .85rem; }
 .ok { color: var(--done); }
 </style>
