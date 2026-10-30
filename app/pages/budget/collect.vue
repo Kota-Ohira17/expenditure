@@ -66,6 +66,19 @@ function approveAll() {
   if (!collecting.value || !s || !confirm(`未提出 ${s.draft}件・要修正 ${s.returned}件・査定待ち ${s.submitted}件を、すべて承認済みにします。担当がまだ提出していない明細も承認されます。よろしいですか？`)) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/approve-all`, { method: 'POST' }), 'すべての明細を承認しました。確定できます。')
 }
+/** まだ提出していない明細（未提出・要修正）の数。「すべて提出」で一度に査定待ちにできる */
+const notSubmitted = computed(() => (summary.value ? summary.value.draft + summary.value.returned : 0))
+function submitAll() {
+  const s = summary.value
+  if (!collecting.value || !s || !confirm(`すべての担当の未提出 ${s.draft}件・要修正 ${s.returned}件を提出します（査定待ちになります）。よろしいですか？`)) return
+  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/submit-all`, { method: 'POST' }), 'すべての明細を提出しました。「査定」で査定できます。')
+}
+/** 自分の担当の未提出・要修正をまとめて提出する（担当の人） */
+const toSubmitOf = (teamId: number) => itemsOf(teamId).filter(i => i.status === 'draft' || i.status === 'returned').length
+function submitTeam(t: BudgetTeamView) {
+  if (!confirm(`${t.team}の未提出・要修正の明細${toSubmitOf(t.id)}件を提出します。提出すると、査定が終わるまで直せません。よろしいですか？`)) return
+  act(() => $fetch(`/api/budget/teams/${t.id}/submit`, { method: 'POST' }), `${t.team}の明細を提出しました。財務管理部の査定を待ってください。`)
+}
 function cancelRound() {
   if (!collecting.value || !confirm('集約をやめます。この集約で入力した明細はすべて消えます。よろしいですか？')) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}`, { method: 'DELETE' }), '集約をやめました。')
@@ -93,6 +106,7 @@ function cancelRound() {
         <div v-if="reviewer" class="buttons">
           <NuxtLink class="button" to="/budget/review">査定する（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
           <NuxtLink class="button secondary" to="/budget/setup">局・担当と入力する人</NuxtLink>
+          <button :disabled="pending || !notSubmitted" @click="submitAll">すべて提出（{{ notSubmitted }}件）</button>
           <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
           <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定する</button>
           <button class="secondary" :disabled="pending" @click="cancelRound">集約をやめる</button>
@@ -102,7 +116,10 @@ function cancelRound() {
       <div v-if="myTeams.length" class="card">
         <h2>あなたが入力する担当</h2>
         <ul class="team-links">
-          <li v-for="t in myTeams" :key="t.id"><NuxtLink :to="`/budget/team/${t.id}`">{{ t.bureau }} ／ {{ t.team }}</NuxtLink></li>
+          <li v-for="t in myTeams" :key="t.id">
+            <NuxtLink :to="`/budget/team/${t.id}`">{{ t.bureau }} ／ {{ t.team }}</NuxtLink>
+            <button class="submit-team" :disabled="pending || !toSubmitOf(t.id)" @click="submitTeam(t)">すべて提出（{{ toSubmitOf(t.id) }}件）</button>
+          </li>
         </ul>
       </div>
       <p v-else-if="!reviewer" class="hint">あなたはまだ担当に割り当てられていません。財務管理部に、入力する担当を割り当ててもらってください。</p>
@@ -160,7 +177,8 @@ function cancelRound() {
 h2 { font-size: 1.1rem; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
 .kind { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
-.team-links { margin: 0; padding-left: 1.2rem; }
+.team-links { margin: 0; padding-left: 1.2rem; display: grid; gap: .4rem; }
+.submit-team { margin-left: .8rem; padding: .3rem .7rem; font-size: .85rem; }
 .base { font-weight: 400; color: var(--muted); margin-left: .3rem; font-size: .85rem; }
 .ok { color: var(--done); }
 </style>
