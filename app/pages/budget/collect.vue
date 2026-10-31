@@ -29,14 +29,16 @@ function teamCard(t: BudgetTeamView) {
 }
 /** 自分の担当を先に、そのあと要修正・未提出・査定待ち・承認済みの順に並べる */
 const order = { red: 0, gray: 1, yellow: 2, green: 3 }
-const cards = computed(() => (collecting.value?.teams ?? [])
+/** 出す担当（昨年の本予算・決算に明細がある担当と、この集約に項目がある担当） */
+const listedTeams = computed(() => (collecting.value?.teams ?? []).filter(t => t.listed))
+const cards = computed(() => listedTeams.value
   .map(t => ({ team: t, ...teamCard(t) }))
   .sort((a, b) => Number(!!b.mine) - Number(!!a.mine) || order[a.status.tone] - order[b.status.tone]))
 const summary = computed(() => (collecting.value ? teamSummary(collecting.value.items) : null))
 /** 局ごとのタブ（件数は担当の数） */
 const bureau = ref('')
 const bureauTabs = computed(() => {
-  const teams = collecting.value?.teams ?? []
+  const teams = listedTeams.value
   const bureaus = [...new Set(teams.map(t => t.bureau))]
   return [{ key: '', label: 'すべて', count: teams.length }, ...bureaus.map(b => ({ key: b, label: b, count: teams.filter(t => t.bureau === b).length }))]
 })

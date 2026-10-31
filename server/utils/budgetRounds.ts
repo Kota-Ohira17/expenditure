@@ -195,12 +195,19 @@ const teamFor = (teams: BudgetTeam[], r: Pick<BudgetItemRow, 'bureau' | 'team'>)
 /** 画面に渡す集約の中身（局・担当、項目、自分が入力できる担当） */
 export async function roundView(round: BudgetRound, user: SessionUser) {
   const db = useDb()
-  const [{ bureaus, departments, teams, latest, base, state, statusOf }, me, members] = await Promise.all([
+  const [{ bureaus, departments, teams, latest, base, state, statusOf }, me, members, referenced] = await Promise.all([
     roundState(round),
     db.query.users.findFirst({ where: eq(schema.users.email, user.email) }),
     db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
       .from(schema.users).where(ne(schema.users.budgetTeam, '')),
+    db.selectDistinct({ bureau: schema.budgetReferences.bureau, team: schema.budgetReferences.team }).from(schema.budgetReferences),
   ])
+  // 集約・査定に出す担当：昨年の本予算・決算（取り込んだ参考）に明細がある担当と、この集約に項目がある担当。
+  // 参考をまだ取り込んでいなければ、すべての担当を出す
+  const refKeys = new Set(referenced.map(r => `${r.bureau}|${r.team}`))
+  const withItems = new Set([...latest.values()].filter(r => !r.deleted).map(r => `${r.bureau}|${r.team}`))
+  const listed = (t: BudgetTeam) => !refKeys.size || withItems.has(`${t.bureau}|${t.team}`)
+    || teamNamesOf(t).some(n => refKeys.has(`${t.bureau}|${n}`))
   const teamOrder = new Map(teams.map((t, i) => [t.id, i]))
   const items = [...latest.values()].flatMap((r) => {
     const b = base.get(r.itemNumber)
@@ -231,7 +238,7 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
     round,
     bureaus,
     departments,
-    teams: teams.map(t => ({ ...t, department: departments.find(d => d.id === t.departmentId) ?? null, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
+    teams: teams.map(t => ({ ...t, listed: listed(t), department: departments.find(d => d.id === t.departmentId) ?? null, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
     items,
     editableTeamIds: editable,
   }

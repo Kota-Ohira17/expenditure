@@ -28,8 +28,10 @@ const teamId = ref<number | ''>('')
 const change = ref<'' | 'plus' | 'minus' | 'new' | 'deleted'>('')
 const flag = ref<'' | 'isNew' | 'preExecution' | 'comment'>('')
 const teamById = computed(() => new Map((view.value?.teams ?? []).map(t => [t.id, t])))
-const bureaus = computed(() => [...new Set((view.value?.teams ?? []).map(t => t.bureau))])
-const teamOptions = computed(() => (view.value?.teams ?? []).filter(t => !bureau.value || t.bureau === bureau.value))
+/** 出す担当（昨年の本予算・決算に明細がある担当と、この集約に項目がある担当） */
+const listedTeams = computed(() => (view.value?.teams ?? []).filter(t => t.listed))
+const bureaus = computed(() => [...new Set(listedTeams.value.map(t => t.bureau))])
+const teamOptions = computed(() => listedTeams.value.filter(t => !bureau.value || t.bureau === bureau.value))
 watch(bureau, () => { teamId.value = '' })
 /** 局のタブ以外の絞り込み・検索に当てはまるか（局は withBureau のときだけ見る。タブの件数は局を見ずに数える） */
 function matches(i: BudgetItemView, withBureau = true) {
