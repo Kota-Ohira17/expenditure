@@ -133,7 +133,6 @@ async function approveAll(ids: string[]) {
         : '今は集約していません。「集約」の画面で集約開始 → 集約終了 → 査定開始の順に進めると、査定できます。' }}
     </p>
     <template v-else>
-      <BureauTabs v-model="bureau" :tabs="bureauTabs" />
       <label class="search">
         <AppIcon name="search" />
         <input v-model="query" type="search" placeholder="査定を検索（項目番号・名前・担当・取引先・備考）" aria-label="査定を検索">
@@ -158,6 +157,7 @@ async function approveAll(ids: string[]) {
           </select>
         </div>
       </div>
+      <BureauTabs v-model="bureau" :tabs="bureauTabs" />
       <div v-if="groups.length > 1" class="fold-all">
         <button class="link" @click="toggleAll">{{ allOpen ? 'すべて折りたたむ' : 'すべて開く' }}</button>
       </div>

@@ -124,19 +124,85 @@ function addTo(kan: string) {
         </p>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
         <p v-if="message" class="ok">{{ message }}</p>
-        <div v-if="editable && (toSubmit || canAdd)" class="buttons">
-          <button v-if="phase !== 'closed'" :disabled="pending || !toSubmit" @click="submit">提出（{{ toSubmit }}件）</button>
-          <button v-if="canAdd" class="secondary" :disabled="pending" @click="addTo('')">明細の追加</button>
+        <div v-if="editable && toSubmit && phase !== 'closed'" class="buttons">
+          <button :disabled="pending" @click="submit">今年の明細を提出（{{ toSubmit }}件）</button>
         </div>
         <p v-if="editable && !reviewer && phase === 'closed'" class="hint">集約は終了しました。査定が始まると、要修正になった明細だけ直して出し直せます。</p>
         <p v-if="editable && !reviewer && phase === 'reviewing'" class="hint">査定中です。要修正になった明細だけ直して出し直せます。</p>
         <p v-if="!editable && open" class="hint">この担当の明細は見るだけです（入力できるのは、この担当に割り当てられた人と財務管理部です）。</p>
       </div>
 
-      <BudgetItemForm
-        v-if="editing === 'new'" :initial="{ kan: newKan }" :kans="kanNames" submit-label="追加"
-        :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
-      />
+      <section class="mine">
+        <header class="mine-head">
+          <div class="mine-title">
+            <h2>今年の明細（{{ view.round.term }} {{ view.round.kind }}・提出する分）</h2>
+            <span class="muted">{{ items.filter(i => !i.deleted).length }}件・合計 {{ formatYen(summary.total) }}</span>
+          </div>
+          <button v-if="canAdd" class="secondary" :disabled="pending" @click="addTo('')">明細の追加</button>
+        </header>
+        <BudgetItemForm
+          v-if="editing === 'new'" :initial="{ kan: newKan }" :kans="kanNames" submit-label="追加"
+          :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
+        />
+
+        <div v-for="k in kans" :key="k.kan" class="kan" :class="{ folded: folded.has(k.kan) }">
+          <div class="kan-head">
+            <button class="fold" :aria-expanded="!folded.has(k.kan)" :aria-label="folded.has(k.kan) ? '開く' : '折りたたむ'" @click="toggle(k.kan)">
+              <AppIcon name="chevron-down" />
+            </button>
+            <h2 @click="toggle(k.kan)">{{ k.kan || '（款なし）' }}</h2>
+            <span class="muted">{{ k.list.length }}件</span>
+            <span class="muted">{{ formatYen(k.total) }}</span>
+            <button v-if="canAdd" class="link" @click="addTo(k.kan)">この款に追加</button>
+          </div>
+          <div v-show="!folded.has(k.kan)" class="table-wrap">
+            <table class="items">
+              <thead>
+                <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>単価</th><th>金額</th><th>{{ view.round.kind === '本予算' ? '昨年から' : 'もとの予算から' }}</th><th>取引先</th><th>状態</th><th /></tr>
+              </thead>
+              <tbody>
+                <template v-for="i in k.list" :key="i.id">
+                  <tr :class="{ deleted: i.deleted }">
+                    <td class="no">{{ i.number }}</td>
+                    <td>{{ itemName(i) }}<small v-if="i.spec" class="muted spec">{{ i.spec }}</small></td>
+                    <td>{{ i.quantity }}</td>
+                    <td class="num">{{ formatYen(i.unitPrice) }}</td>
+                    <td class="num">{{ formatYen(i.amount) }}</td>
+                    <td class="num change" :class="changeOf(i).kind">{{ changeOf(i).label }}</td>
+                    <td>{{ i.vendor }}</td>
+                    <td>
+                      <span class="status" :class="i.status">{{ itemStatusLabel(i) }}</span>
+                      <small v-if="i.reviewComment && i.status !== 'approved'" class="comment">{{ i.reviewComment }}</small>
+                    </td>
+                    <td class="actions">
+                      <template v-if="canChange(i)">
+                        <button v-if="!i.deleted" class="link" @click="editing = i.id">修正</button>
+                        <button v-if="!i.deleted" class="link" @click="remove(i)">削除</button>
+                        <button v-else class="link" @click="restore(i)">削除の取り消し</button>
+                      </template>
+                      <button v-if="i.reviewCount || i.status === 'returned'" class="link" @click="toggleHistory(i.id)">やり取り</button>
+                    </td>
+                  </tr>
+                  <tr v-if="historyOpen.has(i.id)">
+                    <td colspan="9">
+                      <ReviewHistory :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
+                    </td>
+                  </tr>
+                  <tr v-if="editing === i.id">
+                    <td colspan="9">
+                      <BudgetItemForm
+                        :initial="i" :kans="kanNames" submit-label="保存" :pending="pending" :errors="errors"
+                        @submit="save" @cancel="editing = null"
+                      />
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p v-if="!items.length" class="hint">まだ明細がありません。「明細の追加」で入れるか、下の昨年の本予算・決算（参考）からコピーしてください。</p>
+      </section>
 
       <section v-if="reference" class="reference" :class="{ folded: !refOpen }">
         <header class="ref-head" @click="refOpen = !refOpen">
@@ -192,63 +258,6 @@ function addTo(kan: string) {
         </div>
       </section>
 
-      <div v-for="k in kans" :key="k.kan" class="kan" :class="{ folded: folded.has(k.kan) }">
-        <div class="kan-head">
-          <button class="fold" :aria-expanded="!folded.has(k.kan)" :aria-label="folded.has(k.kan) ? '開く' : '折りたたむ'" @click="toggle(k.kan)">
-            <AppIcon name="chevron-down" />
-          </button>
-          <h2 @click="toggle(k.kan)">{{ k.kan || '（款なし）' }}</h2>
-          <span class="muted">{{ k.list.length }}件</span>
-          <span class="muted">{{ formatYen(k.total) }}</span>
-          <button v-if="canAdd" class="link" @click="addTo(k.kan)">この款に追加</button>
-        </div>
-        <div v-show="!folded.has(k.kan)" class="table-wrap">
-          <table class="items">
-            <thead>
-              <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>単価</th><th>金額</th><th>{{ view.round.kind === '本予算' ? '昨年から' : 'もとの予算から' }}</th><th>取引先</th><th>状態</th><th /></tr>
-            </thead>
-            <tbody>
-              <template v-for="i in k.list" :key="i.id">
-                <tr :class="{ deleted: i.deleted }">
-                  <td class="no">{{ i.number }}</td>
-                  <td>{{ itemName(i) }}<small v-if="i.spec" class="muted spec">{{ i.spec }}</small></td>
-                  <td>{{ i.quantity }}</td>
-                  <td class="num">{{ formatYen(i.unitPrice) }}</td>
-                  <td class="num">{{ formatYen(i.amount) }}</td>
-                  <td class="num change" :class="changeOf(i).kind">{{ changeOf(i).label }}</td>
-                  <td>{{ i.vendor }}</td>
-                  <td>
-                    <span class="status" :class="i.status">{{ itemStatusLabel(i) }}</span>
-                    <small v-if="i.reviewComment && i.status !== 'approved'" class="comment">{{ i.reviewComment }}</small>
-                  </td>
-                  <td class="actions">
-                    <template v-if="canChange(i)">
-                      <button v-if="!i.deleted" class="link" @click="editing = i.id">修正</button>
-                      <button v-if="!i.deleted" class="link" @click="remove(i)">削除</button>
-                      <button v-else class="link" @click="restore(i)">削除の取り消し</button>
-                    </template>
-                    <button v-if="i.reviewCount || i.status === 'returned'" class="link" @click="toggleHistory(i.id)">やり取り</button>
-                  </td>
-                </tr>
-                <tr v-if="historyOpen.has(i.id)">
-                  <td colspan="9">
-                    <ReviewHistory :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
-                  </td>
-                </tr>
-                <tr v-if="editing === i.id">
-                  <td colspan="9">
-                    <BudgetItemForm
-                      :initial="i" :kans="kanNames" submit-label="保存" :pending="pending" :errors="errors"
-                      @submit="save" @cancel="editing = null"
-                    />
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <p v-if="!items.length" class="hint">まだ明細がありません。</p>
     </template>
     <p v-else>担当が見つかりません。</p>
   </section>
@@ -265,6 +274,13 @@ function addTo(kan: string) {
 .fold:hover:not(:disabled) { background: var(--accent-bg); }
 .fold :deep(.app-icon) { transition: transform .15s; }
 .kan.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
+/* 今年の明細（提出する分）：色の付いた実線の枠で囲み、昨年の参考（点線）と見分ける */
+.mine { margin: 1rem 0 1.6rem; padding: .2rem .8rem .8rem; border: 2px solid var(--accent); border-radius: 12px; background: var(--surface); }
+.mine-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+.mine-title { flex: 1 1 14rem; display: grid; }
+.mine-title h2 { font-size: 1.1rem; margin: 0; color: var(--accent-text); }
+.mine-title .muted { font-size: .82rem; }
+.mine .kan:first-of-type { margin-top: .8rem; }
 /* 昨年の本予算・決算（参考）：本体の明細と見分けられるよう、点線の枠で囲む */
 .reference { margin: 1rem 0 1.6rem; border: 1.5px dashed var(--border); border-radius: 12px; background: var(--panel); }
 .ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; cursor: pointer; user-select: none; }
