@@ -176,6 +176,13 @@
       "when": 1793415183793,
       "tag": "0024_budget_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793415492696,
+      "tag": "0025_pre_execution_entry",
+      "breakpoints": true
     }
   ]
 }

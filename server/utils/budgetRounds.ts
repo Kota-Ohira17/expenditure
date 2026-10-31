@@ -486,7 +486,7 @@ export async function cancelRound(round: BudgetRound) {
 
 /**
  * 執行依頼で選ぶ予算（budget_lines）と「支出」シートの行を、①の承認済みの最新の行から作り直す（予算提出・承認の出力）。
- * 承認済みの予算前執行の枠も、予算明細に足す。settlePreExecutions なら（本予算の確定のとき）、枠で執行した申請を本予算の項目に付け替える。
+ * settlePreExecutions なら（本予算の確定のとき）、予算前執行の執行依頼を本予算の項目に付け替える。
  */
 export async function rebuildCurrentBudget(options: { settlePreExecutions?: boolean } = {}) {
   const db = useDb()
@@ -502,8 +502,7 @@ export async function rebuildCurrentBudget(options: { settlePreExecutions?: bool
   const items = rows.map(r => ({ ...r, teamId: teams.find(t => t.bureau === r.bureau && t.team === r.team)!.id }))
   const numbers = new Map(items.map(i => [i.id, i.itemNumber]))
   const { lines, sheetRows } = parseBudgetRows(confirmSheetRows(teams, items, numbers))
+  await replaceBudgetLines(lines, sheetRows, confirmed?.kind ?? '本予算')
   if (options.settlePreExecutions) await settlePreExecutions(lines)
-  const pre = await preExecutionLines(lines.length)
-  await replaceBudgetLines([...lines, ...pre], sheetRows, confirmed?.kind ?? '本予算')
   return { lines }
 }

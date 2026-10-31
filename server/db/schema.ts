@@ -318,9 +318,9 @@ export const budgetChangeRequests = sqliteTable('budget_change_requests', {
 export type BudgetChangeRequest = typeof budgetChangeRequests.$inferSelect
 
 /**
- * ④予算前執行DB。本予算が確定する前に新しい年度の分を執行するための枠。
- * 担当が申請し、財務管理部が承認すると、執行依頼で選べる（予算明細に「予算前執行」の行として出る）。
- * 本予算が確定したら、同じ項目番号（なければ同じ款・項・目・節）の予算項目に、その枠で執行した申請を付け替える。
+ * ④予算前執行DB。本予算が確定する前に、新しい年度の分を執行した記録（執行依頼③と1対1）。
+ * 予算前執行は、予算の表から選ばない執行依頼として出し（支出項目名を書く）、ここに支出項目名と執行依頼を記録する。
+ * 本予算が確定したら、同じ局・担当で同じ名前の予算項目に、その執行依頼を付け替える（合う項目がなければ予算外の執行のまま）。
  */
 export const PRE_EXECUTION_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn', 'settled'] as const
 export const preExecutionRequests = sqliteTable('pre_execution_requests', {
@@ -349,6 +349,10 @@ export const preExecutionRequests = sqliteTable('pre_execution_requests', {
   reviewComment: text('review_comment').notNull().default(''),
   /** 本予算が確定したあとに付け替えた予算明細（予算にない場合は null） */
   lineKey: text('line_key'),
+  /** この予算前執行の執行依頼（③）。予算前執行は、予算の表から選ばない執行依頼として出す */
+  entryId: integer('entry_id').references(() => entries.id),
+  /** 執行依頼に書いた支出項目名（本予算の確定のとき、同じ名前の項目に付け替える） */
+  itemName: text('item_name').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   createdBy: text('created_by').notNull(),
   reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }),
