@@ -6,6 +6,7 @@
  * 集約中は変更できない（集約の明細で直す）。執行依頼で使われた明細は、削除と名前の変更ができない。
  */
 import type { BudgetItemInput } from '#shared/schemas'
+import { BUDGET_TERM } from '#shared/constants'
 
 const { can } = usePermissions()
 const reviewer = computed(() => can('reviewBudget'))
@@ -68,13 +69,13 @@ const shown = computed(() => listed.value.filter(c => !bureau.value || c.bureau 
 
 /** 変更・申請のフォーム */
 const creating = ref(false)
-const form = reactive({ teamId: '' as number | '', kind: 'edit' as 'edit' | 'add' | 'delete', itemId: '' as number | '', reason: '' })
+const form = reactive({ teamId: '' as number | '', kind: 'edit' as 'edit' | 'add' | 'delete', itemNumber: '', reason: '' })
 const myTeams = computed(() => (data.value?.teams ?? []).filter(t => data.value!.editableTeamIds.includes(t.id)))
 const teamItems = computed(() => (data.value?.items ?? []).filter(i => i.teamId === form.teamId))
 const teamKans = computed(() => [...new Set(teamItems.value.map(i => i.kan).filter(Boolean))])
-const picked = computed(() => teamItems.value.find(i => i.id === form.itemId))
-const pendingOn = (i: Item) => data.value?.pendingItemIds.includes(i.id)
-watch(() => form.teamId, () => { form.itemId = '' })
+const picked = computed(() => teamItems.value.find(i => i.number === form.itemNumber))
+const pendingOn = (i: Item) => data.value?.pendingItemNumbers.includes(i.number)
+watch(() => form.teamId, () => { form.itemNumber = '' })
 const pending = ref(false)
 const errors = ref<string[]>([])
 const message = ref('')
@@ -90,7 +91,7 @@ async function send(values: BudgetItemInput | null) {
     errors.value = ['担当を選んでください。']
     return
   }
-  if (form.kind !== 'add' && form.itemId === '') {
+  if (form.kind !== 'add' && form.itemNumber === '') {
     errors.value = ['変える明細を選んでください。']
     return
   }
@@ -100,11 +101,11 @@ async function send(values: BudgetItemInput | null) {
   try {
     const res = await $fetch('/api/budget/changes', {
       method: 'POST',
-      body: { kind: form.kind, teamId: form.teamId, itemId: form.kind === 'add' ? null : form.itemId, values, reason: form.reason },
+      body: { kind: form.kind, teamId: form.teamId, itemNumber: form.kind === 'add' ? null : form.itemNumber, values, reason: form.reason },
     })
     message.value = res.applied ? '予算を変更しました。執行依頼で選ぶ予算にもすぐ反映されています。' : '変更を申請しました。財務管理部の承認を待ってください。'
     creating.value = false
-    Object.assign(form, { itemId: '', reason: '' })
+    Object.assign(form, { itemNumber: '', reason: '' })
     tab.value = res.applied ? 'approved' : 'pending'
     await Promise.all([refresh(), res.applied && refreshNuxtData(['budget-lines', 'budget-current'])])
   }
@@ -117,9 +118,9 @@ async function send(values: BudgetItemInput | null) {
 }
 
 /** 承認・却下（財務管理部）と取り下げ（申請した人） */
-const comments = reactive<Record<number, string>>({})
-const cardErrors = reactive<Record<number, string[]>>({})
-const busy = ref<number | null>(null)
+const comments = reactive<Record<string, string>>({})
+const cardErrors = reactive<Record<string, string[]>>({})
+const busy = ref<string | null>(null)
 async function act(c: Change, run: () => Promise<unknown>, linesChanged = false) {
   busy.value = c.id
   delete cardErrors[c.id]
@@ -145,16 +146,15 @@ function withdraw(c: Change) {
   <section>
     <div class="page-head">
       <h1>予算の変更</h1>
-      <button v-if="data && !data.open && data.round && myTeams.length" class="primary" @click="openForm">
+      <button v-if="data && data.round && myTeams.length" class="primary" @click="openForm">
         <AppIcon name="plus" /> {{ reviewer ? '予算の変更' : '変更の申請' }}
       </button>
     </div>
     <p class="hint">
-      集約とは別に、確定した予算（{{ data?.round ? `${data.round.term} ${data.round.kind}` : 'まだありません' }}）の明細を直す・足す・消すことができます。
+      集約とは別に、今の予算（{{ BUDGET_TERM }}）の項目を直す・足す・消すことができます。
       {{ reviewer ? '財務管理部の変更はすぐ予算に反映されます。担当からの申請は、承認すると反映されます。' : '申請すると、財務管理部が承認したときに予算に反映されます。' }}
     </p>
-    <p v-if="data?.open" class="card">今は集約中なので、予算の変更はできません。「集約」で担当の明細を直してください。</p>
-    <p v-else-if="data?.round && !myTeams.length && !reviewer" class="card">あなたはまだ担当に割り当てられていないので、変更を申請できません。</p>
+    <p v-if="data?.round && !myTeams.length && !reviewer" class="card">あなたはまだ担当に割り当てられていないので、変更を申請できません。</p>
     <p v-if="message" class="ok">{{ message }}</p>
 
     <div v-if="creating" class="card create">
@@ -172,9 +172,9 @@ function withdraw(c: Change) {
         </fieldset>
       </div>
       <label v-if="form.kind !== 'add' && form.teamId !== ''"><span>変える明細<span class="req">*</span></span>
-        <select v-model="form.itemId" required>
+        <select v-model="form.itemNumber" required>
           <option value="">選んでください</option>
-          <option v-for="i in teamItems" :key="i.id" :value="i.id" :disabled="pendingOn(i)">
+          <option v-for="i in teamItems" :key="i.id" :value="i.number" :disabled="pendingOn(i)">
             {{ i.number }}　{{ i.kan }} ／ {{ itemName(i) }}　{{ formatYen(i.amount) }}{{ pendingOn(i) ? '（承認待ちの変更あり）' : '' }}
           </option>
         </select>

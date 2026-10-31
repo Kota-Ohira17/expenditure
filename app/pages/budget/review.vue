@@ -81,10 +81,14 @@ watch([filter, query, bureau, teamId, change, flag], () => {
 })
 const STATUS_TONE = { draft: 'gray', submitted: 'yellow', returned: 'red', approved: 'green' } as const
 
-const comments = reactive<Record<number, string>>({})
-const errors = reactive<Record<number, string[]>>({})
-const busy = ref<number | null>(null)
-async function review(id: number, decision: 'approve' | 'return') {
+/** ⑤のやり取りを開いている項目 */
+const historyOpen = reactive(new Set<string>())
+const toggleHistory = (id: string) => (historyOpen.has(id) ? historyOpen.delete(id) : historyOpen.add(id))
+
+const comments = reactive<Record<string, string>>({})
+const errors = reactive<Record<string, string[]>>({})
+const busy = ref<string | null>(null)
+async function review(id: string, decision: 'approve' | 'return') {
   busy.value = id
   delete errors[id]
   try {
@@ -101,9 +105,9 @@ async function review(id: number, decision: 'approve' | 'return') {
   }
 }
 /** その担当の査定待ちをまとめて承認する */
-async function approveAll(ids: number[]) {
+async function approveAll(ids: string[]) {
   if (!view.value || !confirm(`${ids.length}件をまとめて承認します。よろしいですか？`)) return
-  busy.value = -1
+  busy.value = 'all'
   try {
     await $fetch(`/api/budget/rounds/${view.value.round.id}/approve`, { method: 'POST', body: { ids } })
     await refresh()
@@ -186,13 +190,20 @@ async function approveAll(ids: number[]) {
             </template>
             {{ formatYen(i.amount) }}<span v-if="i.baseAmount != null" class="base">（{{ view?.round.kind === '本予算' ? '昨年' : 'もとの予算' }} {{ formatYen(i.baseAmount) }}）</span>
             <span class="sub">{{ [i.quantity && `数量 ${i.quantity}`, i.unitPrice != null && `単価 ${formatYen(i.unitPrice)}`, i.vendor].filter(Boolean).join('・') }}</span>
-            <template v-if="i.status === 'submitted'" #footer>
-              <div class="actions">
+            <template #footer>
+              <div v-if="i.status === 'submitted'" class="actions">
                 <input v-model="comments[i.id]" class="comment" placeholder="コメント（要修正のときは必須）">
                 <button :disabled="busy !== null" @click="review(i.id, 'approve')">承認</button>
                 <button class="secondary" :disabled="busy !== null" @click="review(i.id, 'return')">要修正</button>
               </div>
               <ul v-if="errors[i.id]?.length" class="error"><li v-for="e in errors[i.id]" :key="e">{{ e }}</li></ul>
+              <button class="link history-toggle" @click="toggleHistory(i.id)">
+                <AppIcon name="message-circle" /> やり取り（{{ i.reviewCount }}）
+              </button>
+              <ReviewHistory
+                v-if="historyOpen.has(i.id) && view" :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id"
+                can-reply @replied="refresh()"
+              />
             </template>
           </InfoCard>
         </div>
@@ -223,4 +234,5 @@ async function approveAll(ids: number[]) {
 .sub { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: .2rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .comment { flex: 1 1 16rem; max-width: none; }
+.history-toggle { display: inline-flex; align-items: center; gap: .3rem; font-size: .82rem; margin-top: .4rem; }
 </style>

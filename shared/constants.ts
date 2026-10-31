@@ -43,6 +43,9 @@ export const OTHER_METHODS = [
   { type: 'その他', label: 'その他' },
 ] as const
 
+/** 予算の期。1年ごとに変わるが、今は第100期で固定 */
+export const BUDGET_TERM = '第100期'
+
 export const BUDGET_CHANGES = ['大幅な増額（1万円以上）', '増額（1万円未満）', '減額', '変動なし'] as const
 export type BudgetChange = (typeof BUDGET_CHANGES)[number]
 

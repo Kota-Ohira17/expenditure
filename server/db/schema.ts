@@ -203,79 +203,150 @@ export const budgetTeams = sqliteTable('budget_teams', {
   sortOrder: real('sort_order').notNull(),
 })
 
-/** 集約中の予算の明細。担当が入力し、財務管理部が査定する */
-export const budgetItems = sqliteTable('budget_items', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  roundId: integer('round_id').notNull().references(() => budgetRounds.id),
-  teamId: integer('team_id').notNull().references(() => budgetTeams.id),
-  /** 確定したときの項目番号（写した明細はもとの番号。新しい明細は確定まで空） */
+export type BudgetRound = typeof budgetRounds.$inferSelect
+export type BudgetTeam = typeof budgetTeams.$inferSelect
+
+/**
+ * ①予算項目DB と ⑦補正予算項目DB の列（同じ形）。
+ * 行は書き換えず、直すたびに1行足す。項目番号ごとに、いちばん新しい行（作成日時）が今の値。
+ * 消すときも「削除」の行を足す（いちばん新しい行が削除なら、その項目はない扱い）。
+ */
+const budgetItemColumns = () => ({
+  /** ランダムな id */
+  id: text('id').primaryKey(),
+  /** 期（例: 第100期） */
+  term: text('term').notNull(),
+  /** この行を書いた集約（予算の変更・最初の取り込みは null） */
+  roundId: integer('round_id'),
+  /** 項目番号（例: out01-01-01 ＝ 局-款-項目）。行を足すときに自動で付け、以後はこの番号で同じ項目を追う */
+  itemNumber: text('item_number').notNull(),
+  bureau: text('bureau').notNull(),
+  team: text('team').notNull(),
+  /** 項目名＝款・項・目・節 */
+  kan: text('kan').notNull().default(''),
+  kou: text('kou').notNull().default(''),
+  moku: text('moku').notNull().default(''),
+  setsu: text('setsu').notNull().default(''),
+  amount: integer('amount').notNull(),
+  quantity: text('quantity').notNull().default(''),
+  unitPrice: integer('unit_price'),
+  /** 仕様等 */
+  spec: text('spec').notNull().default(''),
+  vendor: text('vendor').notNull().default(''),
+  remark: text('remark').notNull().default(''),
+  link: text('link').notNull().default(''),
+  plannedTiming: text('planned_timing').notNull().default(''),
+  isNew: integer('is_new', { mode: 'boolean' }).notNull().default(false),
+  preExecution: integer('pre_execution', { mode: 'boolean' }).notNull().default(false),
+  /** 削除の行 */
+  deleted: integer('deleted', { mode: 'boolean' }).notNull().default(false),
+  /** 案（集約中）／承認済み（予算として確定・承認された） */
+  status: text('status', { enum: ['draft', 'approved'] }).notNull().default('draft'),
+  sortOrder: real('sort_order').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  /** 作成者（予算の変更は、承認した財務管理部の人） */
+  createdBy: text('created_by').notNull(),
+})
+
+/** ①予算項目DB（本予算の集約・予算の変更・補正予算の承認で行が増える） */
+export const mainBudgetItems = sqliteTable('main_budget_items', budgetItemColumns())
+/** ⑦補正予算項目DB（①と同じ形。補正予算の集約で、①の今の値を写してから行を足していく） */
+export const revisedBudgetItems = sqliteTable('revised_budget_items', budgetItemColumns())
+export type BudgetItemRow = typeof mainBudgetItems.$inferSelect
+
+/**
+ * ②予算変更申請DB。担当の人が申請し、財務管理部が承認すると①に行を足す（補正予算の集約中は⑦にも）。
+ * 財務管理部は直接変更できる（申請と承認を同時に行った扱い）。だれが変えたかは画面に出さない（メールは記録だけ）。
+ */
+export const BUDGET_CHANGE_REQUEST_KINDS = ['add', 'edit', 'delete'] as const
+export const budgetChangeRequests = sqliteTable('budget_change_requests', {
+  id: text('id').primaryKey(),
+  term: text('term').notNull(),
+  /** 項目番号（新規は承認したときに付いた番号） */
+  itemNumber: text('item_number').notNull().default(''),
+  bureau: text('bureau').notNull(),
+  team: text('team').notNull(),
+  /** 新規／変更／削除 */
+  kind: text('kind', { enum: BUDGET_CHANGE_REQUEST_KINDS }).notNull(),
+  /** 変更後の情報（①とほぼ同じ項目。削除は null） */
+  after: text('after', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  /** 変更前の情報（履歴で比べるため。新規は null） */
+  before: text('before', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  reason: text('reason').notNull().default(''),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  createdBy: text('created_by').notNull(),
+  sortOrder: real('sort_order').notNull().default(0),
+  /** 承認状況：承認待ち／承認／却下／取り下げ */
+  status: text('status', { enum: ['pending', 'approved', 'rejected', 'withdrawn'] }).notNull().default('pending'),
+  /** 財務管理部が直接変更したもの */
+  direct: integer('direct', { mode: 'boolean' }).notNull().default(false),
+  reviewComment: text('review_comment').notNull().default(''),
+  reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }),
+  reviewedBy: text('reviewed_by'),
+})
+export type BudgetChangeRequest = typeof budgetChangeRequests.$inferSelect
+
+/**
+ * ④予算前執行DB。本予算が確定する前に新しい年度の分を執行するための枠。
+ * 担当が申請し、財務管理部が承認すると、執行依頼で選べる（予算明細に「予算前執行」の行として出る）。
+ * 本予算が確定したら、同じ項目番号（なければ同じ款・項・目・節）の予算項目に、その枠で執行した申請を付け替える。
+ */
+export const PRE_EXECUTION_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn', 'settled'] as const
+export const preExecutionRequests = sqliteTable('pre_execution_requests', {
+  id: text('id').primaryKey(),
+  term: text('term').notNull(),
+  /** 申請したときの本予算の集約 */
+  roundId: integer('round_id'),
+  bureau: text('bureau').notNull(),
+  team: text('team').notNull(),
+  /** 集約中の項目に対応するなら、その項目番号 */
   itemNumber: text('item_number').notNull().default(''),
   kan: text('kan').notNull().default(''),
   kou: text('kou').notNull().default(''),
   moku: text('moku').notNull().default(''),
   setsu: text('setsu').notNull().default(''),
   quantity: text('quantity').notNull().default(''),
-  unitPrice: integer('unit_price'),
-  amount: integer('amount').notNull(),
   vendor: text('vendor').notNull().default(''),
-  /** 仕様・詳細 */
-  spec: text('spec').notNull().default(''),
-  link: text('link').notNull().default(''),
-  plannedTiming: text('planned_timing').notNull().default(''),
-  remark: text('remark').notNull().default(''),
-  isNew: integer('is_new', { mode: 'boolean' }).notNull().default(false),
-  preExecution: integer('pre_execution', { mode: 'boolean' }).notNull().default(false),
-  sortOrder: real('sort_order').notNull(),
-  status: text('status', { enum: BUDGET_ITEM_STATUSES }).notNull().default('draft'),
-  /** 財務管理部からのコメント（要修正の理由など） */
-  reviewComment: text('review_comment').notNull().default(''),
-  /** 削除する（確定すると予算から消える）。写した明細を消すときに付ける */
-  deleted: integer('deleted', { mode: 'boolean' }).notNull().default(false),
-  /** 写したもとの明細と、その金額（差額を出すため）。新しい明細は null */
-  baseItemId: integer('base_item_id'),
-  baseAmount: integer('base_amount'),
-  /** 取り込んだ昨年の本予算・決算（budget_references）からコピーした明細なら、そのもとの行 */
-  referenceId: integer('reference_id'),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedBy: text('updated_by').notNull(),
-})
-
-export type BudgetRound = typeof budgetRounds.$inferSelect
-export type BudgetTeam = typeof budgetTeams.$inferSelect
-export type BudgetItem = typeof budgetItems.$inferSelect
-
-/**
- * 予算の変更（集約とは別に、確定した予算の明細を直す・足す・消す）。
- * 担当の人は申請して財務管理部の承認を待つ。財務管理部は直接変更できる（申請と承認を同時に行った扱い）。
- * 承認したものが変更の履歴になる。だれが変えたかは画面に出さない（メールは記録だけ）。
- */
-export const BUDGET_CHANGE_KINDS = ['edit', 'add', 'delete'] as const
-export const BUDGET_CHANGE_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn'] as const
-export const budgetChanges = sqliteTable('budget_changes', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 変更した確定済みの予算（集約） */
-  roundId: integer('round_id').notNull().references(() => budgetRounds.id),
-  teamId: integer('team_id').notNull().references(() => budgetTeams.id),
-  /** 対象の明細（追加は反映したときに入る） */
-  itemId: integer('item_id'),
-  /** 項目番号（追加は反映したときに付いた番号） */
-  itemNumber: text('item_number').notNull().default(''),
-  kind: text('kind', { enum: BUDGET_CHANGE_KINDS }).notNull(),
-  status: text('status', { enum: BUDGET_CHANGE_STATUSES }).notNull().default('pending'),
-  /** 財務管理部が直接変更したもの */
-  direct: integer('direct', { mode: 'boolean' }).notNull().default(false),
-  /** 変更前と変更後の明細の値（追加は before なし、削除は after なし） */
-  before: text('before', { mode: 'json' }).$type<Record<string, unknown> | null>(),
-  after: text('after', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  /** 申請額（枠の上限） */
+  amount: integer('amount').notNull(),
   reason: text('reason').notNull().default(''),
+  neededBy: text('needed_by').notNull().default(''),
+  /** 承認待ち／承認済み／却下／取り下げ／確定済み（本予算の項目に付け替えた） */
+  status: text('status', { enum: PRE_EXECUTION_STATUSES }).notNull().default('pending'),
+  /** 認めた額（申請額から減らせる） */
+  approvedAmount: integer('approved_amount'),
   reviewComment: text('review_comment').notNull().default(''),
+  /** 本予算が確定したあとに付け替えた予算明細（予算にない場合は null） */
+  lineKey: text('line_key'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   createdBy: text('created_by').notNull(),
   reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }),
   reviewedBy: text('reviewed_by'),
 })
+export type PreExecutionRequest = typeof preExecutionRequests.$inferSelect
 
-export type BudgetChange = typeof budgetChanges.$inferSelect
+/**
+ * ⑤査定DB。提出・承認・要修正・修正・返事を、項目ごとに1行ずつ残す（書き換えない）。
+ * 項目の査定の状態は、その集約での最新の行の status。
+ */
+export const BUDGET_REVIEW_ACTIONS = ['create', 'edit', 'submit', 'approve', 'return', 'reply', 'reflect'] as const
+export const budgetReviews = sqliteTable('budget_reviews', {
+  id: text('id').primaryKey(),
+  roundId: integer('round_id').notNull(),
+  itemNumber: text('item_number').notNull(),
+  /** 追加／修正／提出／承認／要修正／返事／財務管理部の修正（折衝の反映） */
+  action: text('action', { enum: BUDGET_REVIEW_ACTIONS }).notNull(),
+  /** この行のあとの査定の状態 */
+  status: text('status', { enum: BUDGET_ITEM_STATUSES }).notNull(),
+  comment: text('comment').notNull().default(''),
+  /** そのときの①⑦の行（どの版を見たか） */
+  rowId: text('row_id'),
+  /** まとめて行った操作（担当のすべて提出・まとめて承認・すべて承認・集約終了の自動提出） */
+  bulk: text('bulk'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  createdBy: text('created_by').notNull(),
+})
+export type BudgetReview = typeof budgetReviews.$inferSelect
 
 /**
  * 本予算の集約で参考にする、取り込んだ昨年の本予算・決算の明細。

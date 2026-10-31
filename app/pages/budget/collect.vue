@@ -5,6 +5,8 @@
  * 担当ごとの進み具合は、局ごとのタブで絞り、担当の枠ははじめは折りたたんでおく（見出しを押すと開く）。
  * 集約していないときは、財務管理部には次の集約を始めるフォーム（最新の確定した予算を写して始める）。
  */
+import { BUDGET_TERM } from '#shared/constants'
+
 const { can } = usePermissions()
 const reviewer = computed(() => can('reviewBudget'))
 const { data: view, refresh } = await useBudgetRound()
@@ -75,8 +77,8 @@ async function act(run: () => Promise<unknown>, done: string, linesChanged = fal
 }
 
 /** 集約を始める（財務管理部） */
-const start = reactive({ kind: '' as '' | '本予算' | '補正予算', term: '' })
-const startRound = () => act(() => $fetch('/api/budget/rounds', { method: 'POST', body: start }), `${start.term} ${start.kind}の集約を始めました。`)
+const start = reactive({ kind: '' as '' | '本予算' | '補正予算' })
+const startRound = () => act(() => $fetch('/api/budget/rounds', { method: 'POST', body: start }), `${BUDGET_TERM} ${start.kind}の集約を始めました。`)
 function confirmRound() {
   if (!collecting.value || !confirm('予算を確定します。今の予算明細がこの予算に入れ替わります。よろしいですか？')) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/confirm`, { method: 'POST' }), '予算を確定しました。執行依頼ではこの予算から選べます。', true)
@@ -221,8 +223,8 @@ function cancelRound() {
               <label class="check"><input v-model="start.kind" type="radio" value="本予算" required> 本予算（新しい期）</label>
               <label class="check"><input v-model="start.kind" type="radio" value="補正予算"> 補正予算（同じ期）</label>
             </fieldset>
-            <label>期<input v-model.trim="start.term" class="w-m" required placeholder="例：第100期"></label>
-            <button type="submit" :disabled="pending || !start.kind || !start.term">集約開始</button>
+            <p class="hint">期：{{ BUDGET_TERM }}</p>
+            <button type="submit" :disabled="pending || !start.kind">集約開始</button>
           </form>
         </template>
         <p v-else class="hint">財務管理部が集約を始めると、ここから自分の担当の明細を入力できます。</p>

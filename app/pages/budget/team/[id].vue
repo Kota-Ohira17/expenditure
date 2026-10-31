@@ -63,7 +63,10 @@ const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
 /** 提出できる件数（未提出・要修正。集約終了の間は0） */
 const toSubmit = computed(() => (phase.value === 'closed' ? 0 : summary.value.draft + summary.value.returned))
 
-const editing = ref<number | 'new' | null>(null)
+const editing = ref<string | 'new' | null>(null)
+/** ⑤のやり取りを開いている項目 */
+const historyOpen = reactive(new Set<string>())
+const toggleHistory = (id: string) => (historyOpen.has(id) ? historyOpen.delete(id) : historyOpen.add(id))
 const newKan = ref('')
 const pending = ref(false)
 const errors = ref<string[]>([])
@@ -224,6 +227,12 @@ function addTo(kan: string) {
                       <button v-if="!i.deleted" class="link" @click="remove(i)">削除</button>
                       <button v-else class="link" @click="restore(i)">削除の取り消し</button>
                     </template>
+                    <button v-if="i.reviewCount || i.status === 'returned'" class="link" @click="toggleHistory(i.id)">やり取り</button>
+                  </td>
+                </tr>
+                <tr v-if="historyOpen.has(i.id)">
+                  <td colspan="9">
+                    <ReviewHistory :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
                   </td>
                 </tr>
                 <tr v-if="editing === i.id">

@@ -1,15 +1,14 @@
-import { eq } from 'drizzle-orm'
 import { budgetReviewSchema } from '../../../../../shared/schemas'
 
-/** 査定する（財務管理部）。査定待ちの明細を、承認するか、理由を付けて担当に戻す（要修正） */
+/** 査定する（財務管理部）。査定待ちの明細を、承認するか、理由を付けて担当に戻す（要修正）。⑤に行を足す */
 export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'reviewBudget')
-  const { item, round } = await openItemOr404(Number(getRouterParam(event, 'id')))
+  const { row, round, status } = await openItemOr404(String(getRouterParam(event, 'id')))
   assertPhase(round, 'reviewing')
-  if (item.status !== 'submitted') throw createError({ statusCode: 409, message: '査定待ちの明細ではありません。' })
+  if (status !== 'submitted') throw createError({ statusCode: 409, message: '査定待ちの明細ではありません。' })
   const { decision, comment } = parseOr400(budgetReviewSchema.safeParse(await readBody(event)))
-  const [updated] = await useDb().update(schema.budgetItems)
-    .set({ status: decision === 'approve' ? 'approved' : 'returned', reviewComment: comment, updatedAt: new Date(), updatedBy: user.email })
-    .where(eq(schema.budgetItems.id, item.id)).returning()
-  return updated
+  const next = decision === 'approve' ? 'approved' as const : 'returned' as const
+  const review = reviewRow(round.id, row.itemNumber, decision === 'approve' ? 'approve' : 'return', next, user, { comment, rowId: row.id })
+  await useDb().insert(schema.budgetReviews).values(review)
+  return { status: next, reviewComment: decision === 'approve' ? '' : comment, updatedAt: review.createdAt }
 })

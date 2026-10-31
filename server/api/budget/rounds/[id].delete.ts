@@ -1,11 +1,7 @@
-import { eq } from 'drizzle-orm'
-
-/** 集約をやめる（財務管理部）。集約中の明細はすべて消える。確定した予算は変わらない */
+/** 集約をやめる（財務管理部）。その集約で書いた明細はすべて消える。確定した予算は変わらない */
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'reviewBudget')
-  const id = Number(getRouterParam(event, 'id'))
-  const round = await useDb().query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, id) })
-  if (!round || round.status === 'confirmed') throw createError({ statusCode: 404, message: '確定していない集約が見つかりません。' })
+  const round = await openRoundOr404(Number(getRouterParam(event, 'id')))
   await cancelRound(round)
   return { ok: true }
 })

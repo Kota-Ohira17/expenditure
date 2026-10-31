@@ -1,27 +1,34 @@
 import { eq } from 'drizzle-orm'
+import { BUDGET_TERM } from '../../../../shared/constants'
 import { can } from '../../../../shared/roles'
 import { budgetChangeSchema } from '../../../../shared/schemas'
 
-/**
- * 予算の変更（修正・追加・削除）。その担当の人は申請（承認待ち）、財務管理部はそのまま予算に反映する。
- */
+/** 予算の変更（新規・変更・削除）。その担当の人は②に申請（承認待ち）、財務管理部はそのまま①に反映する */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const body = parseOr400(budgetChangeSchema.safeParse(await readBody(event)))
-  const round = await changeableRound()
-  const draft = { kind: body.kind, teamId: body.teamId, itemId: body.kind === 'add' ? null : body.itemId!, after: body.values ?? null }
-  const { team, item } = await checkChange(draft, round.id)
+  const { teams, rows } = await currentBudget()
+  const team = teams.find(t => t.id === body.teamId)
+    ?? (() => {
+      // 確定した集約にない担当（id は負の数で渡る）は、今の予算の項目から探す
+      const r = body.itemNumber ? rows.find(x => x.itemNumber === body.itemNumber) : null
+      return r ? { bureau: r.bureau, team: r.team } : null
+    })()
+  if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
   if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の予算は変更を申請できません。' })
-  await assertNoPending(draft.itemId)
+  const draft = { kind: body.kind, bureau: team.bureau, team: team.team, itemNumber: body.kind === 'add' ? '' : body.itemNumber!, after: body.values ?? null }
+  const { row } = await checkChange(draft)
+  await assertNoPending(draft.itemNumber)
 
   const direct = can(user.role, 'reviewBudget')
-  const [change] = await useDb().insert(schema.budgetChanges).values({
+  const [change] = await useDb().insert(schema.budgetChangeRequests).values({
+    id: newId(),
+    term: BUDGET_TERM,
     ...draft,
-    roundId: round.id,
-    itemNumber: item?.itemNumber ?? '',
-    before: item ? itemValues(item) : null,
     after: body.kind === 'delete' ? null : body.values!,
+    before: row ? itemValues(row) : null,
     reason: body.reason,
+    sortOrder: row?.sortOrder ?? 0,
     direct,
     createdAt: new Date(),
     createdBy: user.email,
@@ -32,7 +39,7 @@ export default defineEventHandler(async (event) => {
     }
     catch (error) {
       // 反映できなかった直接の変更は、記録にも残さない
-      await useDb().delete(schema.budgetChanges).where(eq(schema.budgetChanges.id, change!.id))
+      await useDb().delete(schema.budgetChangeRequests).where(eq(schema.budgetChangeRequests.id, change!.id))
       throw error
     }
   }

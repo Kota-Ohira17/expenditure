@@ -113,6 +113,27 @@
       "when": 1793345239698,
       "tag": "0015_budget_references",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1793409458500,
+      "tag": "0016_budget_db_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793409460810,
+      "tag": "0017_budget_db_v2_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793409539170,
+      "tag": "0018_budget_db_v2_drop",
+      "breakpoints": true
     }
   ]
 }

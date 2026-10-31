@@ -137,10 +137,9 @@ export const notificationSettingsSchema = z.object({
 })
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>
 
-/** 予算の集約を始める（財務管理部） */
+/** 予算の集約を始める（財務管理部）。期は第100期で固定 */
 export const budgetRoundStartSchema = z.object({
   kind: z.enum(['本予算', '補正予算'], { error: '本予算か補正予算かを選んでください。' }),
-  term: required('期（例：第100期）').pipe(z.string().max(30)),
 })
 
 /** 予算の明細（担当が入力する）。金額は負の数も入れられる（企画納入など） */
@@ -170,15 +169,15 @@ export const budgetCopySchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(5000),
 })
 
-/** 予算の変更（集約とは別に、確定した予算の明細を直す・足す・消す）。修正・追加は values、修正・削除は itemId が要る */
+/** ②予算の変更（集約とは別に、今の予算の項目を直す・足す・消す）。修正・追加は values、修正・削除は itemNumber が要る */
 export const budgetChangeSchema = z.object({
   kind: z.enum(['edit', 'add', 'delete']),
-  teamId: z.number().int().positive(),
-  itemId: z.number().int().positive().nullish(),
+  teamId: z.number().int(),
+  itemNumber: z.string().trim().max(50).nullish(),
   values: budgetItemSchema.nullish(),
   reason: z.string().trim().max(1000).default(''),
 }).superRefine((v, ctx) => {
-  if (v.kind !== 'add' && !v.itemId) ctx.addIssue({ code: 'custom', message: '変える明細を選んでください。', path: ['itemId'] })
+  if (v.kind !== 'add' && !v.itemNumber) ctx.addIssue({ code: 'custom', message: '変える項目を選んでください。', path: ['itemNumber'] })
   if (v.kind !== 'delete' && !v.values) ctx.addIssue({ code: 'custom', message: '明細の内容を入力してください。', path: ['values'] })
 })
 export type BudgetChangeInput = z.input<typeof budgetChangeSchema>
@@ -191,17 +190,49 @@ export const budgetChangeReviewSchema = z.object({
   if (v.decision === 'reject' && !v.comment) ctx.addIssue({ code: 'custom', message: '却下の理由を書いてください。', path: ['comment'] })
 })
 
-/** 査定（財務管理部）：承認か、要修正（理由を書く） */
-/** 査定待ちの明細をまとめて承認する（査定の「まとめて承認」） */
+/** 査定待ちの明細をまとめて承認する（査定の「まとめて承認」）。ids は画面に出した行の id */
 export const budgetApproveSchema = z.object({
-  ids: z.array(z.number().int().positive()).min(1).max(5000),
+  ids: z.array(z.string().min(1).max(64)).min(1).max(5000),
 })
 
+/** 査定（財務管理部）：承認か、要修正（理由を書く） */
 export const budgetReviewSchema = z.object({
   decision: z.enum(['approve', 'return']),
   comment: z.string().trim().max(1000).default(''),
 }).superRefine((v, ctx) => {
   if (v.decision === 'return' && !v.comment) ctx.addIssue({ code: 'custom', message: '要修正の理由を書いてください。', path: ['comment'] })
+})
+
+/** 要修正への担当の返事（⑤に残す） */
+export const budgetReplySchema = z.object({
+  comment: required('返事').pipe(z.string().max(1000)),
+})
+
+/** ④予算前執行の申請（担当の人・財務管理部）。本予算の集約中だけ */
+export const preExecutionSchema = z.object({
+  teamId: z.number().int().positive(),
+  itemNumber: z.string().trim().max(50).nullish(),
+  kan: required('款').pipe(z.string().max(100)),
+  kou: z.string().trim().max(100).default(''),
+  moku: z.string().trim().max(100).default(''),
+  setsu: z.string().trim().max(100).default(''),
+  quantity: z.string().trim().max(100).default(''),
+  vendor: z.string().trim().max(100).default(''),
+  amount: z.coerce.number({ error: '金額を数字で入力してください。' }).int('金額は整数で入力してください。').positive('金額は1円以上で入力してください。'),
+  reason: required('予算の確定前に要る理由').pipe(z.string().max(1000)),
+  neededBy: z.string().trim().max(100).default(''),
+}).superRefine((v, ctx) => {
+  if (!v.kou && !v.moku && !v.setsu) ctx.addIssue({ code: 'custom', message: '項・目・節のどれかに名前を入れてください。', path: ['kou'] })
+})
+export type PreExecutionInput = z.input<typeof preExecutionSchema>
+
+/** ④予算前執行の承認（認める額）・却下（理由） */
+export const preExecutionReviewSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  approvedAmount: z.coerce.number().int().positive('認める額は1円以上で入力してください。').nullish(),
+  comment: z.string().trim().max(1000).default(''),
+}).superRefine((v, ctx) => {
+  if (v.decision === 'reject' && !v.comment) ctx.addIssue({ code: 'custom', message: '却下の理由を書いてください。', path: ['comment'] })
 })
 
 /** 局・担当を足す・直す（財務管理部） */
