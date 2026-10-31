@@ -153,7 +153,7 @@ function cancelRound() {
             <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
             <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
           </template>
-          <NuxtLink class="button secondary" to="/budget/setup">局・担当と入力する人</NuxtLink>
+          <NuxtLink class="button secondary" to="/budget/setup">局・部・担当と入力する人</NuxtLink>
           <button class="secondary" :disabled="pending" @click="cancelRound">集約の取りやめ</button>
         </div>
       </div>

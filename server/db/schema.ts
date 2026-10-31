@@ -201,11 +201,25 @@ export const budgetBureaus = sqliteTable('budget_bureaus', {
   sortOrder: real('sort_order').notNull(),
 })
 
+/** 集約ごとの部（局の中のグループ。例: 屋外運用部 mng）。担当は部の中に入れる（部に入らない局の直属の担当もある） */
+export const budgetDepartments = sqliteTable('budget_departments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  roundId: integer('round_id').notNull().references(() => budgetRounds.id),
+  bureauId: integer('bureau_id').notNull().references(() => budgetBureaus.id),
+  /** 部の英語名（例: mng） */
+  code: text('code').notNull(),
+  /** 部の日本語名（例: 屋外運用部） */
+  nameJa: text('name_ja').notNull().default(''),
+  sortOrder: real('sort_order').notNull(),
+})
+
 export const budgetTeams = sqliteTable('budget_teams', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   roundId: integer('round_id').notNull().references(() => budgetRounds.id),
   /** 属する局 */
   bureauId: integer('bureau_id').references(() => budgetBureaus.id),
+  /** 属する部（局の直属なら null） */
+  departmentId: integer('department_id').references(() => budgetDepartments.id),
   /** 局の番号と局の名前（局の写し。局を直すと一緒に直す） */
   bureauNo: text('bureau_no').notNull(),
   bureau: text('bureau').notNull(),
@@ -221,6 +235,7 @@ export const budgetTeams = sqliteTable('budget_teams', {
 export type BudgetRound = typeof budgetRounds.$inferSelect
 export type BudgetTeam = typeof budgetTeams.$inferSelect
 export type BudgetBureau = typeof budgetBureaus.$inferSelect
+export type BudgetDepartment = typeof budgetDepartments.$inferSelect
 
 /**
  * ①予算項目DB と ⑦補正予算項目DB の列（同じ形）。

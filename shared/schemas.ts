@@ -247,9 +247,21 @@ export const budgetTeamSchema = z.object({
   nameJa: z.string().trim().max(50).default(''),
 })
 
-/** 局の中に担当を足す（財務管理部） */
+/** 局の中に担当を足す（財務管理部）。部に入れるなら departmentId */
 export const budgetTeamCreateSchema = budgetTeamSchema.extend({
   bureauId: z.number().int().positive(),
+  departmentId: z.number().int().positive().nullish(),
+})
+
+/** 担当を部に入れる・部から出す（局の直属にする）（財務管理部） */
+export const budgetTeamMoveSchema = z.object({
+  departmentId: z.number().int().positive().nullable(),
+})
+
+/** 部を足す・直す（財務管理部）。英語名（例: mng）と日本語名（例: 屋外運用部） */
+export const budgetDepartmentSchema = z.object({
+  code: required('部（英語）').pipe(z.string().max(50)),
+  nameJa: z.string().trim().max(50).default(''),
 })
 
 /** 担当に割り当てる人（メールアドレスの一覧） */

@@ -169,6 +169,13 @@
       "when": 1793414628901,
       "tag": "0023_team_name_sign",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793415183793,
+      "tag": "0024_budget_departments",
+      "breakpoints": true
     }
   ]
 }
