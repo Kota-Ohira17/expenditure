@@ -56,7 +56,7 @@ const refTotal = computed(() => refKans.value.reduce((s, k) => ({ budget: s.budg
 const notCopied = (list: RefItem[]) => list.filter(i => !i.copied).map(i => i.id)
 /** はじめは、まだ明細がないときだけ開いておく */
 const refOpen = ref(items.value.length === 0)
-const copy = (ids: number[]) => run(() => $fetch(`/api/budget/teams/${teamId}/copy`, { method: 'POST', body: { ids } }), `${ids.length}件コピーしました。直してから提出してください。`)
+const copy = (ids: number[]) => run(() => $fetch(`/api/budget/teams/${teamId}/copy`, { method: 'POST', body: { ids } }), `${ids.length}件コピーしました。内容を確認してから提出してください。`)
 const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
   || (phase.value === 'collecting' && i.status !== 'submitted')
   || (phase.value === 'reviewing' && (i.status === 'returned' || i.status === 'draft')))
@@ -228,7 +228,7 @@ function addTo(kan: string) {
         <div v-if="refOpen" class="ref-body">
           <p class="hint">
             財務管理部が取り込んだ昨年の本予算と決算です（本予算：{{ refFile('budget')?.fileName || '未取り込み' }} ／ 決算：{{ refFile('settlement')?.fileName || '未取り込み' }}）。
-            使える明細はコピーして、直してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は項目番号で本予算の明細に合わせています。
+            使える明細はコピーして、内容を確認してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は項目番号で本予算の明細に合わせています。
           </p>
           <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。財務管理部が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
           <p v-else-if="!reference.items.length" class="hint">取り込んだ本予算・決算に、この担当（{{ team.bureau }} ／ {{ team.team }}）の明細はありません。</p>
