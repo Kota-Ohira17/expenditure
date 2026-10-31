@@ -162,6 +162,13 @@
       "when": 1793413490275,
       "tag": "0022_team_names_en",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1793414628901,
+      "tag": "0023_team_name_sign",
+      "breakpoints": true
     }
   ]
 }
