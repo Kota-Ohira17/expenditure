@@ -6,10 +6,11 @@
  * 「希望予算額」が入っている行が執行対象の明細。上の行の 款・項・目・節 を引き継いで名前を作る。
  * 列は見出し名で探すので、列の並びが変わっても動く。見出しは空白・改行・全角半角の違いを無視し、
  * 書き方の違う別名（例: 「希望予算額」がなければ「予算額」）も受け付ける。
+ * 決算シート（「支出詳細」）は見出しの名前が違うので、SETTLEMENT_COLUMNS で読む。
  */
 
 /** 列ごとの見出し名。前にあるものほど優先する */
-const COLUMNS = {
+export const BUDGET_COLUMNS = {
   number: ['項目番号', '番号'],
   bureau: ['局'],
   team: ['担当', '担当名'],
@@ -24,17 +25,38 @@ const COLUMNS = {
   plannedTiming: ['執行予定時期'],
   remark: ['備考'],
 } as const satisfies Record<string, readonly string[]>
-type ColumnKey = keyof typeof COLUMNS
+type ColumnKey = keyof typeof BUDGET_COLUMNS
+export type SheetColumns = Record<ColumnKey, readonly string[]>
+
+/**
+ * 決算シート（「支出詳細」、MF99_決算の形）の見出し名。金額は執行した額（決算額）。
+ * リンク・執行予定時期の列はない。項目合計・局合計の列は小計なので読まない。
+ */
+export const SETTLEMENT_COLUMNS: SheetColumns = {
+  number: ['項目番号', '番号'],
+  bureau: ['局'],
+  team: ['担当', '担当名'],
+  kan: ['款'],
+  kou: ['項'],
+  moku: ['目'],
+  setsu: ['節'],
+  quantity: ['数量'],
+  vendor: ['取引先'],
+  amount: ['金額', '決算額', '執行額'],
+  link: [],
+  plannedTiming: [],
+  remark: ['備考'],
+}
 
 /** 見出しの比較用（空白・改行を消し、全角英数を半角に） */
 export const normalizeHeader = (s: string) => s.normalize('NFKC').replace(/\s+/g, '')
 
 /** 見出し行での各列の位置（見つからなければ -1） */
-function columnIndexes(header: string[]) {
+function columnIndexes(header: string[], columns: SheetColumns) {
   const cells = header.map(normalizeHeader)
   return Object.fromEntries(
-    (Object.keys(COLUMNS) as ColumnKey[]).map((k) => {
-      for (const name of COLUMNS[k]) {
+    (Object.keys(columns) as ColumnKey[]).map((k) => {
+      for (const name of columns[k]) {
         const i = cells.indexOf(name)
         if (i >= 0) return [k, i]
       }
@@ -94,21 +116,26 @@ export function parseBudgetCsv(text: string) {
   return parseBudgetRows(parseCsv(text))
 }
 
-/** 「支出」シートの行（セルの文字列の配列）を明細にする。予算の集約を確定するときも、作った行をこれで読む */
-export function parseBudgetRows(rows: string[][]): { lines: ParsedBudgetLine[], sheetRows: ParsedSheetRow[] } {
+/**
+ * 「支出」シートの行（セルの文字列の配列）を明細にする。予算の集約を確定するときも、作った行をこれで読む。
+ * 決算シートは columns に SETTLEMENT_COLUMNS を渡す（金額は決算額になる）。
+ */
+export function parseBudgetRows(rows: string[][], columns: SheetColumns = BUDGET_COLUMNS): { lines: ParsedBudgetLine[], sheetRows: ParsedSheetRow[] } {
   const headerIndex = rows.findIndex((r) => {
-    const c = columnIndexes(r)
+    const c = columnIndexes(r, columns)
     return c.number >= 0 && c.amount >= 0
   })
   if (headerIndex < 0) {
     // 何が読めたかを見せて、原因（違うシート・文字化けなど）が分かるようにする
     const preview = rows.slice(0, 3).map(r => r.filter(Boolean).slice(0, 8).join(' / ')).filter(Boolean).join(' ｜ ').slice(0, 200)
+    const settlement = columns === SETTLEMENT_COLUMNS
+    const need = settlement ? '「項目番号」と「金額」' : '「項目番号」と「希望予算額」（または「予算額」）'
     throw createError({
       statusCode: 400,
-      message: `「項目番号」と「希望予算額」（または「予算額」）の見出しの行が見つかりません。「支出」シートの CSV か確認してください。読み取れた先頭の内容: ${preview || '（空）'}`,
+      message: `${need}の見出しの行が見つかりません。${settlement ? '「支出詳細」' : '「支出」'}シートの CSV か確認してください。読み取れた先頭の内容: ${preview || '（空）'}`,
     })
   }
-  const col = columnIndexes(rows[headerIndex]!)
+  const col = columnIndexes(rows[headerIndex]!, columns)
   const get = (row: string[], k: ColumnKey) => (col[k] >= 0 ? (row[col[k]] ?? '').trim() : '')
 
   const ctx = { bureauNo: '', bureau: '', team: '', kanNo: '', kan: '', kouNo: '', kouRawNo: '', kou: '', moku: '', setsu: '' }

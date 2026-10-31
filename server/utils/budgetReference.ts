@@ -14,7 +14,8 @@ export const REFERENCE_LABELS: Record<ReferenceKind, string> = { budget: '本予
 
 /** CSV を読んで、種類ごとに入れ替える */
 export async function importReference(kind: ReferenceKind, fileName: string, data: Uint8Array, user: SessionUser) {
-  const { lines, sheetRows } = parseBudgetRows(parseCsv(decodeCsv(data)))
+  // 決算は決算シートの見出し名（金額＝決算額）で読む
+  const { lines, sheetRows } = parseBudgetRows(parseCsv(decodeCsv(data)), kind === 'settlement' ? SETTLEMENT_COLUMNS : BUDGET_COLUMNS)
   if (!lines.length) {
     const sheet = kind === 'budget' ? '「支出」シート' : '「支出詳細」シート'
     throw createError({ statusCode: 400, message: `金額の入った明細が見つかりませんでした。${sheet}の CSV か確認してください。` })
