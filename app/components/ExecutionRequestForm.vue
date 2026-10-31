@@ -178,7 +178,7 @@ async function onSubmit() {
         <legend>{{ pre ? '予算前執行依頼フォーム' : '予算執行依頼フォーム' }}</legend>
         <label><span>申請者氏名<span class="req">*</span></span><input v-model="form.applicantName" class="w-m" placeholder="例：こまばたろう" required></label>
         <div class="row">
-          <BureauField v-model="form.department" @update:model-value="tabBureau = $event" />
+          <BureauField v-model="form.department" :all="pre" @update:model-value="tabBureau = $event" />
           <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
         </div>
 

@@ -8,11 +8,8 @@ export const BUREAUS = [
   { code: 'JIM', name: '事務局' },
   { code: 'ZAI', name: '財務局' },
   { code: 'SSK', name: '組織局' },
-  { code: 'SOM', name: '総務局' },
   { code: 'EVE', name: '企画局' },
   { code: 'PR', name: '広報局' },
-  { code: 'NT', name: '渉外局' },
-  { code: 'ECO', name: '環境局' },
   { code: 'SYS', name: 'システム局' },
 ] as const
 
