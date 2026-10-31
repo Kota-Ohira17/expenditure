@@ -38,10 +38,12 @@ export const itemsUpdateSchema = z.object({
   vendors: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
 })
 
-function checkItems(v: { budgetLineKeys: string[], itemNumber: string, quantity?: string }, ctx: z.RefinementCtx) {
+function checkItems(v: { budgetLineKeys: string[], itemNumber: string, preExecution: boolean, quantity?: string }, ctx: z.RefinementCtx) {
   // 予算から選んだときの数量は明細ごとに入力する（予算の表に数量がある明細だけ必須。サーバーで確認する）
   if (v.budgetLineKeys.length) return
   if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください。', path: ['quantity'] })
+  // 予算前執行は、まだ予算の項目がないので選ばない（支出項目名だけ書く）
+  if (v.preExecution) return
   if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '執行項目を予算から選んでください。', path: ['budgetLineKeys'] })
   else if (!ITEM_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '項目番号は out-03-02-06 の形式で入力してください。', path: ['itemNumber'] })
 }
@@ -54,6 +56,8 @@ const base = z.object({
   itemName: required('支出項目名'),
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
   budgetCommitteeApproved: z.boolean().default(false),
+  /** 予算前執行（本予算が確定する前の執行。予算の表から選ばない） */
+  preExecution: z.boolean().default(false),
   remark: z.string().trim().default(''),
 })
 
@@ -208,33 +212,6 @@ export const budgetReplySchema = z.object({
   comment: required('返事').pipe(z.string().max(1000)),
 })
 
-/** ④予算前執行の申請（担当の人・財務管理部）。本予算の集約中だけ */
-export const preExecutionSchema = z.object({
-  teamId: z.number().int().positive(),
-  itemNumber: z.string().trim().max(50).nullish(),
-  kan: required('款').pipe(z.string().max(100)),
-  kou: z.string().trim().max(100).default(''),
-  moku: z.string().trim().max(100).default(''),
-  setsu: z.string().trim().max(100).default(''),
-  quantity: z.string().trim().max(100).default(''),
-  vendor: z.string().trim().max(100).default(''),
-  amount: z.coerce.number({ error: '金額を数字で入力してください。' }).int('金額は整数で入力してください。').positive('金額は1円以上で入力してください。'),
-  reason: required('予算の確定前に要る理由').pipe(z.string().max(1000)),
-  neededBy: z.string().trim().max(100).default(''),
-}).superRefine((v, ctx) => {
-  if (!v.kou && !v.moku && !v.setsu) ctx.addIssue({ code: 'custom', message: '項・目・節のどれかに名前を入れてください。', path: ['kou'] })
-})
-export type PreExecutionInput = z.input<typeof preExecutionSchema>
-
-/** ④予算前執行の承認（認める額）・却下（理由） */
-export const preExecutionReviewSchema = z.object({
-  decision: z.enum(['approve', 'reject']),
-  approvedAmount: z.coerce.number().int().positive('認める額は1円以上で入力してください。').nullish(),
-  comment: z.string().trim().max(1000).default(''),
-}).superRefine((v, ctx) => {
-  if (v.decision === 'reject' && !v.comment) ctx.addIssue({ code: 'custom', message: '却下の理由を書いてください。', path: ['comment'] })
-})
-
 /** 局を足す・直す（財務管理部）。局の番号は項目番号の頭になる */
 export const budgetBureauSchema = z.object({
   bureauNo: required('局の番号（例：out01）').pipe(z.string().max(20)),
@@ -247,9 +224,21 @@ export const budgetTeamSchema = z.object({
   nameJa: z.string().trim().max(50).default(''),
 })
 
-/** 局の中に担当を足す（財務管理部） */
+/** 局の中に担当を足す（財務管理部）。部に入れるなら departmentId */
 export const budgetTeamCreateSchema = budgetTeamSchema.extend({
   bureauId: z.number().int().positive(),
+  departmentId: z.number().int().positive().nullish(),
+})
+
+/** 担当を部に入れる・部から出す（局の直属にする）（財務管理部） */
+export const budgetTeamMoveSchema = z.object({
+  departmentId: z.number().int().positive().nullable(),
+})
+
+/** 部を足す・直す（財務管理部）。英語名（例: mng）と日本語名（例: 屋外運用部） */
+export const budgetDepartmentSchema = z.object({
+  code: required('部（英語）').pipe(z.string().max(50)),
+  nameJa: z.string().trim().max(50).default(''),
 })
 
 /** 担当に割り当てる人（メールアドレスの一覧） */

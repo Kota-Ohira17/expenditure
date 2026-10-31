@@ -98,16 +98,23 @@ export async function openRoundOr404(id: number) {
   return round
 }
 
-/** 集約の局と担当を、予算の表の順（局の並び → 局の中の担当の並び）で読む */
+/**
+ * 集約の局・部・担当を、予算の表の順で読む。
+ * 並びは 局の並び → 局の直属の担当 → 部の並び → 部の中の担当の並び。
+ */
 export async function teamsOf(roundId: number) {
   const db = useDb()
-  const [bureaus, teams] = await Promise.all([
+  const [bureaus, departments, teams] = await Promise.all([
     db.select().from(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, roundId)).orderBy(asc(schema.budgetBureaus.sortOrder)),
+    db.select().from(schema.budgetDepartments).where(eq(schema.budgetDepartments.roundId, roundId)).orderBy(asc(schema.budgetDepartments.sortOrder)),
     db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, roundId)),
   ])
-  const order = new Map(bureaus.map((b, i) => [b.id, i]))
-  teams.sort((a, b) => (order.get(a.bureauId ?? -1) ?? 1e9) - (order.get(b.bureauId ?? -1) ?? 1e9) || a.sortOrder - b.sortOrder)
-  return { bureaus, teams }
+  const bureauOrder = new Map(bureaus.map((b, i) => [b.id, i]))
+  const deptOrder = new Map(departments.map((d, i) => [d.id, i + 1]))
+  teams.sort((a, b) => (bureauOrder.get(a.bureauId ?? -1) ?? 1e9) - (bureauOrder.get(b.bureauId ?? -1) ?? 1e9)
+    || (deptOrder.get(a.departmentId ?? -1) ?? 0) - (deptOrder.get(b.departmentId ?? -1) ?? 0)
+    || a.sortOrder - b.sortOrder)
+  return { bureaus, departments, teams }
 }
 
 /** 項目番号から局の番号（out01-04-12 → out01、out-03-02-06 → out-03） */
@@ -157,7 +164,7 @@ export function reviewRow(roundId: number, itemNumber: string, action: typeof sc
 export async function roundState(round: BudgetRound) {
   const db = useDb()
   const table = tableOf(round)
-  const [{ bureaus, teams }, rows, reviews, before] = await Promise.all([
+  const [{ bureaus, departments, teams }, rows, reviews, before] = await Promise.all([
     teamsOf(round.id),
     // 確定した集約は、今の予算（①の承認済みの行。予算の変更も入る）を出す
     round.status === 'confirmed'
@@ -179,7 +186,7 @@ export async function roundState(round: BudgetRound) {
   }
   // ⑤に行がない項目（補正予算で写しただけのもの）は承認済み
   const statusOf = (no: string): BudgetItemStatus => state.get(no)?.status ?? 'approved'
-  return { bureaus, teams, latest, base, state, statusOf }
+  return { bureaus, departments, teams, latest, base, state, statusOf }
 }
 
 /** 担当（局・担当の名前）に合う局・担当の行 */
@@ -188,7 +195,7 @@ const teamFor = (teams: BudgetTeam[], r: Pick<BudgetItemRow, 'bureau' | 'team'>)
 /** 画面に渡す集約の中身（局・担当、項目、自分が入力できる担当） */
 export async function roundView(round: BudgetRound, user: SessionUser) {
   const db = useDb()
-  const [{ bureaus, teams, latest, base, state, statusOf }, me, members] = await Promise.all([
+  const [{ bureaus, departments, teams, latest, base, state, statusOf }, me, members] = await Promise.all([
     roundState(round),
     db.query.users.findFirst({ where: eq(schema.users.email, user.email) }),
     db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
@@ -223,7 +230,8 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
   return {
     round,
     bureaus,
-    teams: teams.map(t => ({ ...t, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
+    departments,
+    teams: teams.map(t => ({ ...t, department: departments.find(d => d.id === t.departmentId) ?? null, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
     items,
     editableTeamIds: editable,
   }
@@ -371,22 +379,33 @@ export async function startRound(kind: BudgetKind, user: SessionUser) {
   const now = new Date()
   const [round] = await db.insert(schema.budgetRounds).values({ term: BUDGET_TERM, kind, status: 'collecting', baseRoundId: base?.id ?? null, createdAt: now, createdBy: user.email }).returning()
   // 局・担当：前の集約のもの（局ごとに担当をまとめて）。今の予算にしかない局・担当も足す
-  const prev = base ? await teamsOf(base.id) : { bureaus: [], teams: [] }
+  const prev = base ? await teamsOf(base.id) : { bureaus: [], departments: [], teams: [] }
   const bureauRows = prev.bureaus.map(b => ({ oldId: b.id as number | null, bureauNo: b.bureauNo, name: b.name, sortOrder: b.sortOrder }))
   const teamRows = prev.teams.map(t => ({ ...t, bureauName: prev.bureaus.find(b => b.id === t.bureauId)?.name ?? t.bureau }))
   for (const r of current) {
     if (!bureauRows.some(b => b.name === r.bureau)) bureauRows.push({ oldId: null, bureauNo: bureauNoOf(r.itemNumber), name: r.bureau, sortOrder: bureauRows.length + 1e6 })
     if (!teamRows.some(t => t.bureauName === r.bureau && t.team === r.team)) {
-      teamRows.push({ id: 0, roundId: 0, bureauId: null, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, nameJa: '', person: '', sortOrder: teamRows.length + 1e6, bureauName: r.bureau })
+      teamRows.push({ id: 0, roundId: 0, bureauId: null, departmentId: null, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, nameJa: '', person: '', sortOrder: teamRows.length + 1e6, bureauName: r.bureau })
     }
   }
   const newBureaus = bureauRows.length
     ? await db.insert(schema.budgetBureaus).values(bureauRows.map(b => ({ roundId: round!.id, bureauNo: b.bureauNo, name: b.name, sortOrder: b.sortOrder }))).returning()
     : []
+  // 部：前の集約の部を、写した局の中に写す
+  const deptRows = prev.departments.flatMap((d) => {
+    const name = prev.bureaus.find(b => b.id === d.bureauId)?.name
+    const b = newBureaus.find(x => x.name === name)
+    return b ? [{ oldId: d.id, roundId: round!.id, bureauId: b.id, code: d.code, nameJa: d.nameJa, sortOrder: d.sortOrder }] : []
+  })
+  const newDepts = deptRows.length ? await db.insert(schema.budgetDepartments).values(deptRows.map(({ oldId: _, ...d }) => d)).returning() : []
+  const deptIdOf = (oldId: number | null) => {
+    const i = deptRows.findIndex(d => d.oldId === oldId)
+    return i >= 0 ? newDepts[i]!.id : null
+  }
   if (teamRows.length) {
     await db.insert(schema.budgetTeams).values(teamRows.map((t) => {
       const b = newBureaus.find(x => x.name === t.bureauName)!
-      return { roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: t.team, nameJa: t.nameJa, person: '', sortOrder: t.sortOrder }
+      return { roundId: round!.id, bureauId: b.id, departmentId: deptIdOf(t.departmentId), bureauNo: b.bureauNo, bureau: b.name, team: t.team, nameJa: t.nameJa, person: '', sortOrder: t.sortOrder }
     }))
   }
   if (kind === '本予算') return round!
@@ -459,6 +478,7 @@ export async function cancelRound(round: BudgetRound) {
     db.delete(schema.revisedBudgetItems).where(eq(schema.revisedBudgetItems.roundId, round.id)),
     db.delete(schema.budgetReviews).where(eq(schema.budgetReviews.roundId, round.id)),
     db.delete(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)),
+    db.delete(schema.budgetDepartments).where(eq(schema.budgetDepartments.roundId, round.id)),
     db.delete(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, round.id)),
     db.delete(schema.budgetRounds).where(eq(schema.budgetRounds.id, round.id)),
   ])
@@ -466,7 +486,7 @@ export async function cancelRound(round: BudgetRound) {
 
 /**
  * 執行依頼で選ぶ予算（budget_lines）と「支出」シートの行を、①の承認済みの最新の行から作り直す（予算提出・承認の出力）。
- * 承認済みの予算前執行の枠も、予算明細に足す。settlePreExecutions なら（本予算の確定のとき）、枠で執行した申請を本予算の項目に付け替える。
+ * settlePreExecutions なら（本予算の確定のとき）、予算前執行の執行依頼を本予算の項目に付け替える。
  */
 export async function rebuildCurrentBudget(options: { settlePreExecutions?: boolean } = {}) {
   const db = useDb()
@@ -482,8 +502,7 @@ export async function rebuildCurrentBudget(options: { settlePreExecutions?: bool
   const items = rows.map(r => ({ ...r, teamId: teams.find(t => t.bureau === r.bureau && t.team === r.team)!.id }))
   const numbers = new Map(items.map(i => [i.id, i.itemNumber]))
   const { lines, sheetRows } = parseBudgetRows(confirmSheetRows(teams, items, numbers))
+  await replaceBudgetLines(lines, sheetRows, confirmed?.kind ?? '本予算')
   if (options.settlePreExecutions) await settlePreExecutions(lines)
-  const pre = await preExecutionLines(lines.length)
-  await replaceBudgetLines([...lines, ...pre], sheetRows, confirmed?.kind ?? '本予算')
   return { lines }
 }

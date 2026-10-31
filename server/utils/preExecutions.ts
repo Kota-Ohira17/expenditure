@@ -1,110 +1,64 @@
-import { and, desc, eq, inArray, like } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
+import { BUDGET_TERM, bureauNameOf } from '../../shared/constants'
+import type { Entry } from '../db/schema'
 import type { ParsedBudgetLine } from './budget'
 import type { SessionUser } from './auth'
 
 /**
- * ④予算前執行DB。本予算が確定する前に、新しい年度の分を執行するための枠。
- * 担当が申請（本予算の集約中だけ）→ 財務管理部が承認（認める額を決める）→ 執行依頼で「予算前執行」の予算明細として選べる
- * → 本予算が確定したら、同じ項目番号（なければ同じ局・担当・款・項・目・節）の予算明細に、その枠で執行した申請を付け替える。
+ * ④予算前執行DB。本予算が確定する前に、新しい年度の分を執行した記録。
+ * 予算前執行は、ふつうの執行依頼（③）と同じフォームで、予算の表から選ばずに支出項目名を書いて出す（台帳で執行する）。
+ * 本予算が確定したら、同じ局・担当で同じ名前の予算明細に、その執行依頼を付け替える（決算でその項目の執行になる）。
  */
 
-/** 予算明細での枠の key */
-export const preLineKey = (id: string) => `pre:${id}`
-
-/** 承認済みの枠を、執行依頼で選べる予算明細の形にする（予算明細のいちばん後ろに並べる） */
-export async function preExecutionLines(offset: number): Promise<ParsedBudgetLine[]> {
-  const list = await useDb().select().from(schema.preExecutionRequests).where(eq(schema.preExecutionRequests.status, 'approved'))
-  return list.map((p, i) => {
-    const name = [p.kou || p.kan, p.moku, p.setsu].filter(Boolean).join(' / ')
-    return {
-      key: preLineKey(p.id),
-      sortOrder: offset + i,
-      itemNumber: p.itemNumber || '予算前執行',
-      bureauNo: '',
-      bureau: p.bureau,
-      team: p.team,
-      kanNo: '',
-      kan: p.kan,
-      kouNo: '',
-      kou: p.kou,
-      moku: p.moku,
-      setsu: p.setsu,
-      level: 'none' as const,
-      label: `【予算前執行】${name}`,
-      quantity: p.quantity,
-      vendor: p.vendor,
-      budgetAmount: p.approvedAmount ?? p.amount,
-      link: '',
-      plannedTiming: p.neededBy,
-      remark: p.reason,
-    }
+/** 予算前執行の執行依頼を受け付けたとき、④に記録する */
+export async function recordPreExecution(entry: Entry, user: SessionUser) {
+  const round = await openRound()
+  await useDb().insert(schema.preExecutionRequests).values({
+    id: newId(),
+    term: BUDGET_TERM,
+    roundId: round?.kind === '本予算' ? round.id : null,
+    bureau: bureauNameOf(entry.department),
+    team: entry.inCharge,
+    itemName: entry.itemName,
+    amount: entry.amount ?? 0,
+    status: 'approved',
+    entryId: entry.id,
+    createdAt: entry.createdAt,
+    createdBy: user.email,
   })
 }
 
+/** 支出項目名が、予算明細の名前に合うか（名前そのもの、または項・目・節のどれか） */
+const matches = (line: ParsedBudgetLine, name: string) => {
+  const n = name.trim()
+  return !!n && (line.label === n || [line.kan, line.kou, line.moku, line.setsu].includes(n))
+}
+
 /**
- * 本予算が確定したとき：承認済みの枠を、確定した予算明細に付け替える（その枠で執行した申請の明細の key・番号・名前も）。
- * 合う明細がない枠は、予算外のまま「確定済み」にする（決算では予算外の執行になる）。
+ * 本予算が確定したとき：まだ付け替えていない予算前執行を、確定した予算明細に付け替える。
+ * 執行依頼に、その明細との対応（entry_items）を足し、項目番号もその明細の番号にする。合う明細がなければ予算外のまま確定済みにする。
  */
 export async function settlePreExecutions(lines: ParsedBudgetLine[]) {
   const db = useDb()
-  const list = await db.select().from(schema.preExecutionRequests).where(eq(schema.preExecutionRequests.status, 'approved'))
+  const list = await db.select().from(schema.preExecutionRequests)
+    .where(and(eq(schema.preExecutionRequests.status, 'approved')))
+  const entryIds = list.map(p => p.entryId).filter((id): id is number => id != null)
+  const entries = entryIds.length ? await db.select().from(schema.entries).where(inArray(schema.entries.id, entryIds)) : []
   for (const p of list) {
-    const line = (p.itemNumber && lines.find(l => l.itemNumber === p.itemNumber && l.bureau === p.bureau && l.team === p.team))
-      || lines.find(l => l.bureau === p.bureau && l.team === p.team && l.kan === p.kan && l.kou === p.kou && l.moku === p.moku && l.setsu === p.setsu)
-      || null
+    const entry = entries.find(e => e.id === p.entryId)
+    const candidates = lines.filter(l => l.bureau === p.bureau && l.team === p.team)
+    const line = candidates.find(l => matches(l, p.itemName)) ?? null
     await db.batch([
       db.update(schema.preExecutionRequests).set({ status: 'settled', lineKey: line?.key ?? null }).where(eq(schema.preExecutionRequests.id, p.id)),
-      ...(line
-        ? [db.update(schema.entryItems).set({ lineKey: line.key, itemNumber: line.itemNumber, label: line.label }).where(eq(schema.entryItems.lineKey, preLineKey(p.id)))]
+      ...(line && entry
+        ? [
+            db.insert(schema.entryItems).values({
+              entryId: entry.id, lineKey: line.key, itemNumber: line.itemNumber, label: line.label,
+              quantity: line.quantity, vendor: line.vendor, budgetAmount: line.budgetAmount, actualAmount: entry.amount,
+            }),
+            db.update(schema.entries).set({ itemNumber: line.itemNumber }).where(eq(schema.entries.id, entry.id)),
+          ]
         : []),
     ])
   }
-}
-
-/** 枠ごとの、執行依頼で使った額（明細の執行額。未入力なら申請の金額）と件数 */
-async function usage() {
-  const db = useDb()
-  const items = await db.select().from(schema.entryItems).where(like(schema.entryItems.lineKey, 'pre:%'))
-  const entries = items.length
-    ? await db.select({ id: schema.entries.id, amount: schema.entries.amount }).from(schema.entries).where(inArray(schema.entries.id, [...new Set(items.map(i => i.entryId))]))
-    : []
-  const amountOf = new Map(entries.map(e => [e.id, e.amount]))
-  const result = new Map<string, { used: number, count: number }>()
-  for (const i of items) {
-    const id = i.lineKey.slice('pre:'.length)
-    const r = result.get(id) ?? { used: 0, count: 0 }
-    r.used += i.actualAmount ?? amountOf.get(i.entryId) ?? 0
-    r.count++
-    result.set(id, r)
-  }
-  return result
-}
-
-/** 画面に出す一覧（新しい順。だれが申請したかは出さず、自分の申請かどうかだけ） */
-export async function preExecutionList(user: SessionUser) {
-  const [list, used] = await Promise.all([
-    useDb().select().from(schema.preExecutionRequests).orderBy(desc(schema.preExecutionRequests.createdAt)),
-    usage(),
-  ])
-  return list.map(({ createdBy, reviewedBy: _r, ...p }) => ({ ...p, mine: createdBy === user.email, used: used.get(p.id)?.used ?? 0, usedCount: used.get(p.id)?.count ?? 0 }))
-}
-
-/** 申請（担当の人・財務管理部）。本予算の集約中だけ */
-export async function createPreExecution(body: {
-  teamId: number, itemNumber?: string | null, kan: string, kou: string, moku: string, setsu: string,
-  quantity: string, vendor: string, amount: number, reason: string, neededBy: string,
-}, user: SessionUser) {
-  const db = useDb()
-  const round = await openRound()
-  if (!round || round.kind !== '本予算') throw createError({ statusCode: 409, message: '予算前執行は、本予算の集約中だけ申請できます。' })
-  const team = await db.query.budgetTeams.findFirst({ where: and(eq(schema.budgetTeams.id, body.teamId), eq(schema.budgetTeams.roundId, round.id)) })
-  if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
-  if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の予算前執行は申請できません。' })
-  const [row] = await db.insert(schema.preExecutionRequests).values({
-    id: newId(), term: round.term, roundId: round.id, bureau: team.bureau, team: team.team,
-    itemNumber: body.itemNumber ?? '', kan: body.kan, kou: body.kou, moku: body.moku, setsu: body.setsu,
-    quantity: body.quantity, vendor: body.vendor, amount: body.amount, reason: body.reason, neededBy: body.neededBy,
-    createdAt: new Date(), createdBy: user.email,
-  }).returning()
-  return row!
 }
