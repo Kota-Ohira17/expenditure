@@ -183,6 +183,13 @@
       "when": 1793415492696,
       "tag": "0025_pre_execution_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1793423310182,
+      "tag": "0026_team_capitalize",
+      "breakpoints": true
     }
   ]
 }

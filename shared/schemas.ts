@@ -5,6 +5,8 @@ const required = (label: string) => {
   const message = `${label}を入力してください。`
   return z.string({ error: message }).trim().min(1, message)
 }
+/** 担当名（英語）は1文字目を必ず大文字にする（eco → Eco） */
+export const capitalizeTeam = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const date = z.string({ error: '日付を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}$/, '日付を入力してください。')
 /** 日付、または日付＋時刻（執行希望日時） */
 const dateTime = z.string({ error: '日時を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, '日時を入力してください。')
@@ -51,7 +53,7 @@ function checkItems(v: { budgetLineKeys: string[], itemNumber: string, preExecut
 const base = z.object({
   applicantName: required('申請者氏名'),
   department: bureau,
-  inCharge: required('担当名'),
+  inCharge: required('担当名').transform(capitalizeTeam),
   ...items,
   itemName: required('支出項目名'),
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
@@ -220,7 +222,7 @@ export const budgetBureauSchema = z.object({
 
 /** 担当の名前（英語の略称）と日本語名を直す（財務管理部） */
 export const budgetTeamSchema = z.object({
-  team: required('担当（英語）').pipe(z.string().max(50)),
+  team: required('担当（英語）').pipe(z.string().max(50)).transform(capitalizeTeam),
   nameJa: z.string().trim().max(50).default(''),
 })
 
