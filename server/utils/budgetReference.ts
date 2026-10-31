@@ -74,16 +74,18 @@ export async function referenceFiles() {
  * 決算は項目番号で本予算の明細に合わせる（同じ番号が複数あれば、その番号の決算の合計を最初の明細に付ける）。
  * 本予算にない番号の決算は「予算外の決算」として並べる（これもコピーできる）。
  */
-export async function referenceFor(round: Pick<BudgetRound, 'id'>, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
   const db = useDb()
-  const [rows, copied, files] = await Promise.all([
+  const [rows, state, files] = await Promise.all([
     db.select().from(schema.budgetReferences)
       .where(and(eq(schema.budgetReferences.bureau, team.bureau), eq(schema.budgetReferences.team, team.team)))
       .orderBy(asc(schema.budgetReferences.kind), asc(schema.budgetReferences.sortOrder)),
-    db.select({ referenceId: schema.budgetItems.referenceId }).from(schema.budgetItems).where(eq(schema.budgetItems.roundId, round.id)),
+    roundState(round),
     referenceFiles(),
   ])
-  const copiedIds = new Set(copied.map(c => c.referenceId))
+  // コピーすると、取り込んだ明細の項目番号のまま①に行を足すので、その番号の項目がこの集約にあればコピー済み
+  const inRound = new Set([...state.latest.values()].filter(r => !r.deleted).map(r => r.itemNumber))
+  const copiedIds = new Set(rows.filter(r => inRound.has(r.itemNumber)).map(r => r.id))
   const budget = rows.filter(r => r.kind === 'budget')
   const settlement = rows.filter(r => r.kind === 'settlement')
   const actualBy = new Map<string, number>()

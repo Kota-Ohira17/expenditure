@@ -1,20 +1,12 @@
-import { eq } from 'drizzle-orm'
-
 /**
- * 明細を消す（その担当の人・財務管理部）。
- * 写してきた明細は「削除する」印を付けるだけ（査定で承認されると、確定したときに予算から消える）。
- * 今回足した明細と、本予算でコピーした明細はそのまま消す（コピーし直せる）。
+ * 明細を消す（その担当の人・財務管理部）。削除の行を足す。
+ * 補正予算で写してきた明細は「削除」の印が付いて残り（取り消せる）、査定で承認されると確定したときに予算から消える。
+ * それ以外（本予算・今回足した明細）は一覧から消える。
  */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
-  const { item, team, round } = await openItemOr404(Number(getRouterParam(event, 'id')))
-  await assertCanChangeItem(user, item, team, round)
-  const db = useDb()
-  if (item.baseItemId == null || round.kind === '本予算') {
-    await db.delete(schema.budgetItems).where(eq(schema.budgetItems.id, item.id))
-    return { removed: true }
-  }
-  await db.update(schema.budgetItems).set({ deleted: true, status: 'draft', updatedAt: new Date(), updatedBy: user.email })
-    .where(eq(schema.budgetItems.id, item.id))
-  return { removed: false }
+  const { row, team, round, status, base } = await openItemOr404(String(getRouterParam(event, 'id')))
+  await assertCanChangeItem(user, status, team, round)
+  await writeItem(round, row, { ...itemValues(row), deleted: true }, user, status)
+  return { removed: round.kind === '本予算' || !base }
 })

@@ -6,7 +6,7 @@
 import feather from 'feather-icons'
 
 /** 使うアイコンの名前（Feather の名前そのまま。一覧は https://feathericons.com） */
-type IconName = 'home' | 'send' | 'list' | 'pie-chart' | 'edit-3' | 'check-square' | 'clock' | 'rotate-ccw' | 'check-circle' | 'search' | 'plus' | 'users' | 'log-out' | 'chevron-down' | 'sliders'
+type IconName = 'home' | 'send' | 'list' | 'pie-chart' | 'edit-3' | 'check-square' | 'clock' | 'rotate-ccw' | 'check-circle' | 'search' | 'plus' | 'users' | 'log-out' | 'chevron-down' | 'sliders' | 'fast-forward' | 'message-circle'
 const props = defineProps<{ name: IconName }>()
 
 const markup = computed(() => feather.icons[props.name].contents)

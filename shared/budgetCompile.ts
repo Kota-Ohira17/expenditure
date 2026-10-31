@@ -16,7 +16,7 @@ export const ITEM_STATUS_LABELS: Record<BudgetItemStatus, string> = {
 
 /** 項目番号を付けるのに要る明細の項目 */
 export interface NumberingTeam { id: number, bureauNo: string, bureau: string, team: string, person: string, sortOrder: number }
-export interface NumberingItem { id: number, teamId: number, kan: string, itemNumber: string, sortOrder: number, deleted: boolean }
+export interface NumberingItem { id: number | string, teamId: number, kan: string, itemNumber: string, sortOrder: number, deleted: boolean }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 /** 項目番号の最後の数（out01-04-12 → 12） */
@@ -38,7 +38,7 @@ export function sortItems<T extends NumberingItem>(teams: NumberingTeam[], items
  */
 export function assignItemNumbers(teams: NumberingTeam[], items: NumberingItem[], keepNumbers: boolean) {
   const teamById = new Map(teams.map(t => [t.id, t]))
-  const result = new Map<number, string>()
+  const result = new Map<number | string, string>()
   const live = sortItems(teams, items).filter(i => !i.deleted)
 
   // 局ごとに、款の並び（初めて出てきた順）と、その款の明細
@@ -98,7 +98,7 @@ export interface SheetItem extends NumberingItem {
 }
 
 /** 確定した予算を「支出」シートの行（見出し＋局・担当・款の行＋明細の行）にする */
-export function confirmSheetRows(teams: NumberingTeam[], items: SheetItem[], numbers: Map<number, string>) {
+export function confirmSheetRows(teams: NumberingTeam[], items: SheetItem[], numbers: Map<number | string, string>) {
   const teamById = new Map(teams.map(t => [t.id, t]))
   const rows: string[][] = [['支出の部'], CONFIRM_SHEET_HEADER]
   const yen = (n: number | null) => (n == null ? '' : `${n < 0 ? '-' : ''}¥${Math.abs(n).toLocaleString('ja-JP')}`)
