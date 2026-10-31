@@ -1,3 +1,5 @@
+import { capitalizeTeam } from '../../shared/schemas'
+
 /**
  * 本予算・補正予算スプレッドシートの「支出」シートの CSV を明細の配列にする（どちらの形でも読める）。
  * 決算シートを元のシートと同じ形で出すため、シートの行そのもの（sheetRows）も返す。
@@ -164,7 +166,8 @@ export function parseBudgetRows(rows: string[][], columns: SheetColumns = BUDGET
 
     const empty = { kanNo: '', kan: '', kouNo: '', kouRawNo: '', kou: '', moku: '', setsu: '' }
     if (bureau) Object.assign(ctx, { ...empty, bureauNo: number, bureau, team: '' })
-    if (team) Object.assign(ctx, { ...empty, team })
+    // 担当名（英語）は1文字目を大文字にそろえる
+    if (team) Object.assign(ctx, { ...empty, team: capitalizeTeam(team) })
     if (kan) Object.assign(ctx, { ...empty, kanNo: number, kan })
     // 項目番号のない項は款の番号を使う
     if (kou) Object.assign(ctx, { kouNo: number || ctx.kanNo, kouRawNo: number, kou, moku: '', setsu: '' })
