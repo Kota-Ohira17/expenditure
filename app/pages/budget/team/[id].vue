@@ -164,7 +164,12 @@ function addTo(kan: string) {
                 <template v-for="i in k.list" :key="i.id">
                   <tr :class="{ deleted: i.deleted }">
                     <td class="no">{{ i.number }}</td>
-                    <td>{{ itemName(i) }}<small v-if="i.spec" class="muted spec">{{ i.spec }}</small></td>
+                    <td>
+                      {{ itemName(i) }}
+                      <span v-if="i.isNew" class="tag fill pink">新規</span>
+                      <span v-if="i.preExecution" class="tag fill yellow">予算前執行</span>
+                      <BudgetItemDetails :item="i" />
+                    </td>
                     <td>{{ i.quantity }}</td>
                     <td class="num">{{ formatYen(i.unitPrice) }}</td>
                     <td class="num">{{ formatYen(i.amount) }}</td>
@@ -301,6 +306,7 @@ function addTo(kan: string) {
 .items .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .items .no { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .spec, .comment { display: block; font-size: .78rem; }
+.items .tag { margin-left: .3rem; font-size: .72rem; }
 .comment { color: var(--danger); }
 .change.plus { color: var(--danger); }
 .change.minus { color: var(--done); }
