@@ -5,8 +5,8 @@ const required = (label: string) => {
   const message = `${label}を入力してください。`
   return z.string({ error: message }).trim().min(1, message)
 }
-/** 担当名（英語）は1文字目を必ず大文字にする（eco → Eco） */
-export const capitalizeTeam = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+/** 日本語名が「統括」「部長」で終わる担当は、担当名（英語）の1文字目を必ず大文字にする（eco → Eco）。ほかは書いたまま */
+export const teamCodeFor = (team: string, nameJa: string) => (/(統括|部長)$/.test(nameJa) ? team.charAt(0).toUpperCase() + team.slice(1) : team)
 const date = z.string({ error: '日付を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}$/, '日付を入力してください。')
 /** 日付、または日付＋時刻（執行希望日時） */
 const dateTime = z.string({ error: '日時を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, '日時を入力してください。')
@@ -53,7 +53,7 @@ function checkItems(v: { budgetLineKeys: string[], itemNumber: string, preExecut
 const base = z.object({
   applicantName: required('申請者氏名'),
   department: bureau,
-  inCharge: required('担当名').transform(capitalizeTeam),
+  inCharge: required('担当名'),
   ...items,
   itemName: required('支出項目名'),
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
@@ -220,17 +220,21 @@ export const budgetBureauSchema = z.object({
   name: required('局').pipe(z.string().max(30)),
 })
 
-/** 担当の名前（英語の略称）と日本語名を直す（財務管理部） */
-export const budgetTeamSchema = z.object({
-  team: required('担当（英語）').pipe(z.string().max(50)).transform(capitalizeTeam),
+const budgetTeamFields = z.object({
+  team: required('担当（英語）').pipe(z.string().max(50)),
   nameJa: z.string().trim().max(50).default(''),
 })
+/** 「統括」「部長」の担当は、英語の略称の1文字目を大文字にする */
+const withTeamCode = <T extends { team: string, nameJa: string }>(v: T) => ({ ...v, team: teamCodeFor(v.team, v.nameJa) })
+
+/** 担当の名前（英語の略称）と日本語名を直す（財務管理部） */
+export const budgetTeamSchema = budgetTeamFields.transform(withTeamCode)
 
 /** 局の中に担当を足す（財務管理部）。部に入れるなら departmentId */
-export const budgetTeamCreateSchema = budgetTeamSchema.extend({
+export const budgetTeamCreateSchema = budgetTeamFields.extend({
   bureauId: z.number().int().positive(),
   departmentId: z.number().int().positive().nullish(),
-})
+}).transform(withTeamCode)
 
 /** 担当を部に入れる・部から出す（局の直属にする）（財務管理部） */
 export const budgetTeamMoveSchema = z.object({

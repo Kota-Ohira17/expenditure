@@ -179,7 +179,7 @@ async function onSubmit() {
         <label><span>申請者氏名<span class="req">*</span></span><input v-model="form.applicantName" class="w-m" placeholder="例：こまばたろう" required></label>
         <div class="row">
           <BureauField v-model="form.department" @update:model-value="tabBureau = $event" />
-          <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：Zas" required></label>
+          <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
         </div>
 
         <label v-if="pre"><span>支出項目名<span class="req">*</span></span>
