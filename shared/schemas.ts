@@ -235,11 +235,20 @@ export const preExecutionReviewSchema = z.object({
   if (v.decision === 'reject' && !v.comment) ctx.addIssue({ code: 'custom', message: '却下の理由を書いてください。', path: ['comment'] })
 })
 
-/** 局・担当を足す・直す（財務管理部） */
-export const budgetTeamSchema = z.object({
+/** 局を足す・直す（財務管理部）。局の番号は項目番号の頭になる */
+export const budgetBureauSchema = z.object({
   bureauNo: required('局の番号（例：out01）').pipe(z.string().max(20)),
-  bureau: required('局').pipe(z.string().max(30)),
+  name: required('局').pipe(z.string().max(30)),
+})
+
+/** 担当の名前を直す（財務管理部） */
+export const budgetTeamSchema = z.object({
   team: required('担当').pipe(z.string().max(50)),
+})
+
+/** 局の中に担当を足す（財務管理部） */
+export const budgetTeamCreateSchema = budgetTeamSchema.extend({
+  bureauId: z.number().int().positive(),
 })
 
 /** 担当に割り当てる人（メールアドレスの一覧） */

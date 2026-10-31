@@ -37,11 +37,18 @@ export default defineEventHandler(async (event) => {
   const [round] = await db.insert(schema.budgetRounds).values({
     term: BUDGET_TERM, kind: budgetKind, status: 'confirmed', createdAt: now, createdBy: user.email, confirmedAt: now,
   }).returning()
-  // 局・担当を、予算の並び順に1つずつ
+  // 局と、局の中の担当を、予算の並び順に1つずつ
+  const bureauRows: (typeof schema.budgetBureaus.$inferInsert)[] = []
+  for (const l of lines) {
+    if (bureauRows.some(b => b.name === l.bureau)) continue
+    bureauRows.push({ roundId: round!.id, bureauNo: l.bureauNo || (l.itemNumber.match(/^[a-z]+-?\d+/i)?.[0] ?? ''), name: l.bureau, sortOrder: bureauRows.length })
+  }
+  const bureaus = await db.insert(schema.budgetBureaus).values(bureauRows).returning()
   const teams: (typeof schema.budgetTeams.$inferInsert)[] = []
   for (const l of lines) {
     if (teams.some(t => t.bureau === l.bureau && t.team === l.team)) continue
-    teams.push({ roundId: round!.id, bureauNo: l.bureauNo || (l.itemNumber.match(/^[a-z]+-?\d+/i)?.[0] ?? ''), bureau: l.bureau, team: l.team, sortOrder: teams.length })
+    const b = bureaus.find(x => x.name === l.bureau)!
+    teams.push({ roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: l.team, sortOrder: teams.filter(t => t.bureauId === b.id).length })
   }
   await db.insert(schema.budgetTeams).values(teams)
 
