@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
   for (const l of lines) {
     if (teams.some(t => t.bureau === l.bureau && t.team === l.team)) continue
     const b = bureaus.find(x => x.name === l.bureau)!
-    teams.push({ roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: l.team, sortOrder: teams.filter(t => t.bureauId === b.id).length })
+    teams.push({ roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: l.team, nameJa: l.team, sortOrder: teams.filter(t => t.bureauId === b.id).length })
   }
   await db.insert(schema.budgetTeams).values(teams)
 

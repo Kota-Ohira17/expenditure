@@ -209,7 +209,10 @@ export const budgetTeams = sqliteTable('budget_teams', {
   /** 局の番号と局の名前（局の写し。局を直すと一緒に直す） */
   bureauNo: text('bureau_no').notNull(),
   bureau: text('bureau').notNull(),
+  /** 担当名（英語の略称。例: eco）。画面と明細の行にはこの名前を使う */
   team: text('team').notNull(),
+  /** 担当の日本語名（例: 環境計画部長）。日本語の担当名で書かれた予算のシート・CSV と合わせるため */
+  nameJa: text('name_ja').notNull().default(''),
   /** 担当者の氏名 */
   person: text('person').notNull().default(''),
   sortOrder: real('sort_order').notNull(),

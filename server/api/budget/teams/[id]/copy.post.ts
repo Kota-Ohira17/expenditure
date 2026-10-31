@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     db.select().from(schema.budgetReferences).where(and(
       inArray(schema.budgetReferences.id, ids),
       eq(schema.budgetReferences.bureau, team.bureau),
-      eq(schema.budgetReferences.team, team.team),
+      inArray(schema.budgetReferences.team, teamNamesOf(team)),
     )),
     roundState(round),
     usedNumbers(round),
