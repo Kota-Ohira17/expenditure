@@ -116,8 +116,8 @@ function submitTeam(t: BudgetTeamView) {
   act(() => $fetch(`/api/budget/teams/${t.id}/submit`, { method: 'POST' }), `${t.team}の明細を提出しました。財務管理部の査定を待ってください。`)
 }
 function cancelRound() {
-  if (!collecting.value || !confirm('集約をやめます。この集約で入力した明細はすべて消えます。よろしいですか？')) return
-  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}`, { method: 'DELETE' }), '集約をやめました。')
+  if (!collecting.value || !confirm('集約を中止します。この集約で入力した明細はすべて消えます。よろしいですか？')) return
+  act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}`, { method: 'DELETE' }), '集約を中止しました。')
 }
 </script>
 
@@ -156,7 +156,7 @@ function cancelRound() {
             <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
           </template>
           <NuxtLink class="button secondary" to="/budget/setup">局・部・担当と入力する人</NuxtLink>
-          <button class="secondary" :disabled="pending" @click="cancelRound">集約の取りやめ</button>
+          <button class="secondary" :disabled="pending" @click="cancelRound">集約の中止</button>
         </div>
       </div>
 

@@ -383,7 +383,7 @@ export async function numbersWhere(round: BudgetRound, test: (status: BudgetItem
  */
 export async function startRound(kind: BudgetKind, user: SessionUser) {
   const db = useDb()
-  if (await openRound()) throw createError({ statusCode: 409, message: '確定していない集約があります。確定するか取りやめてから始めてください。' })
+  if (await openRound()) throw createError({ statusCode: 409, message: '確定していない集約があります。確定するか中止してから始めてください。' })
   const [base, current] = await Promise.all([latestConfirmedRound(), currentRows()])
   if (!base && !current.length) throw createError({ statusCode: 400, message: 'もとにする予算がありません。最初の予算を取り込んでください。' })
 
@@ -481,7 +481,7 @@ export async function confirmRound(round: BudgetRound, user: SessionUser) {
   return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0) }
 }
 
-/** 集約をやめる（その集約で書いた案の行・⑤・局・担当を消す。①の承認済みの行と、確定した予算は変わらない） */
+/** 集約を中止する（その集約で書いた案の行・⑤・局・担当を消す。①の承認済みの行と、確定した予算は変わらない） */
 export async function cancelRound(round: BudgetRound) {
   const db = useDb()
   await db.batch([
