@@ -200,8 +200,12 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
     db.query.users.findFirst({ where: eq(schema.users.email, user.email) }),
     db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
       .from(schema.users).where(ne(schema.users.budgetTeam, '')),
-    db.selectDistinct({ bureau: schema.budgetReferences.bureau, team: schema.budgetReferences.team }).from(schema.budgetReferences),
+    db.select({ bureau: schema.budgetReferences.bureau, team: schema.budgetReferences.team, kind: schema.budgetReferences.kind, itemNumber: schema.budgetReferences.itemNumber, amount: schema.budgetReferences.amount })
+      .from(schema.budgetReferences),
   ])
+  // 本予算の「昨年から」は、取り込んだ昨年の本予算の同じ項目番号の金額（同じ番号が複数あれば合計）と比べる
+  const lastYear = new Map<string, number>()
+  for (const r of referenced) if (r.kind === 'budget') lastYear.set(r.itemNumber, (lastYear.get(r.itemNumber) ?? 0) + r.amount)
   // 集約・査定に出す担当：昨年の本予算・決算（取り込んだ参考）に明細がある担当と、この集約に項目がある担当。
   // 参考をまだ取り込んでいなければ、すべての担当を出す
   const refKeys = new Set(referenced.map(r => `${r.bureau}|${r.team}`))
@@ -228,7 +232,7 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
       status,
       reviewComment: status === 'approved' ? '' : (s?.comment ?? ''),
       reviewCount: s?.count ?? 0,
-      baseAmount: b ? b.amount : null,
+      baseAmount: round.kind === '本予算' ? (lastYear.get(r.itemNumber) ?? null) : b ? b.amount : null,
       baseItemId: b ? b.id : null,
       updatedAt: r.createdAt,
     }]

@@ -239,7 +239,7 @@ function addTo(kan: string) {
                   <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>予算額</th><th>決算額</th><th>取引先</th><th /></tr>
                 </thead>
                 <tbody>
-                  <tr v-for="i in k.list" :key="i.id">
+                  <tr v-for="i in k.list" :key="i.id" :class="{ copied: i.copied }">
                     <td class="no">{{ i.itemNumber }}</td>
                     <td>{{ itemName(i) }}<small v-if="i.spec" class="muted spec">{{ i.spec }}</small></td>
                     <td>{{ i.quantity }}</td>
@@ -247,7 +247,7 @@ function addTo(kan: string) {
                     <td class="num">{{ i.actual == null ? '（上にまとめて）' : formatYen(i.actual) }}</td>
                     <td>{{ i.vendor }}</td>
                     <td class="actions">
-                      <span v-if="i.copied" class="muted">コピー済み</span>
+                      <span v-if="i.copied" class="copied-tag">今年の明細にコピー済み</span>
                       <button v-else-if="canAdd" class="link" :disabled="pending" @click="copy([i.id])">コピー</button>
                     </td>
                   </tr>
@@ -291,7 +291,10 @@ function addTo(kan: string) {
 .ref-body { padding: 0 .8rem .8rem; }
 .ref-body .kan { margin: .8rem 0; }
 .ref-body h3 { font-size: .95rem; margin: 0; }
-.items.ref { min-width: 40rem; }
+.items.ref { min-width: 40rem; background: transparent; }
+/* コピー済みの参考の行は薄くして、まだコピーしていない行を目立たせる */
+.items.ref tr.copied td { color: var(--muted); }
+.copied-tag { font-size: .78rem; color: var(--done); white-space: nowrap; }
 .table-wrap { overflow-x: auto; }
 .items { border-collapse: collapse; width: 100%; min-width: 52rem; background: var(--surface); }
 .items th, .items td { padding: .4rem .55rem; border-bottom: 1px solid var(--border); text-align: left; font-size: .88rem; vertical-align: top; }
