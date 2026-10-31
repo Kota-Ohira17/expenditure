@@ -98,6 +98,18 @@ export async function openRoundOr404(id: number) {
   return round
 }
 
+/** 集約の局と担当を、予算の表の順（局の並び → 局の中の担当の並び）で読む */
+export async function teamsOf(roundId: number) {
+  const db = useDb()
+  const [bureaus, teams] = await Promise.all([
+    db.select().from(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, roundId)).orderBy(asc(schema.budgetBureaus.sortOrder)),
+    db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, roundId)),
+  ])
+  const order = new Map(bureaus.map((b, i) => [b.id, i]))
+  teams.sort((a, b) => (order.get(a.bureauId ?? -1) ?? 1e9) - (order.get(b.bureauId ?? -1) ?? 1e9) || a.sortOrder - b.sortOrder)
+  return { bureaus, teams }
+}
+
 /** 項目番号から局の番号（out01-04-12 → out01、out-03-02-06 → out-03） */
 const bureauNoOf = (itemNumber: string) => itemNumber.match(/^[a-z]+-?\d+/i)?.[0] ?? ''
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -145,8 +157,8 @@ export function reviewRow(roundId: number, itemNumber: string, action: typeof sc
 export async function roundState(round: BudgetRound) {
   const db = useDb()
   const table = tableOf(round)
-  const [teams, rows, reviews, before] = await Promise.all([
-    db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)).orderBy(asc(schema.budgetTeams.sortOrder)),
+  const [{ bureaus, teams }, rows, reviews, before] = await Promise.all([
+    teamsOf(round.id),
     // 確定した集約は、今の予算（①の承認済みの行。予算の変更も入る）を出す
     round.status === 'confirmed'
       ? rowsOf(schema.mainBudgetItems, and(eq(schema.mainBudgetItems.term, round.term), eq(schema.mainBudgetItems.status, 'approved')))
@@ -167,7 +179,7 @@ export async function roundState(round: BudgetRound) {
   }
   // ⑤に行がない項目（補正予算で写しただけのもの）は承認済み
   const statusOf = (no: string): BudgetItemStatus => state.get(no)?.status ?? 'approved'
-  return { teams, latest, base, state, statusOf }
+  return { bureaus, teams, latest, base, state, statusOf }
 }
 
 /** 担当（局・担当の名前）に合う局・担当の行 */
@@ -176,7 +188,7 @@ const teamFor = (teams: BudgetTeam[], r: Pick<BudgetItemRow, 'bureau' | 'team'>)
 /** 画面に渡す集約の中身（局・担当、項目、自分が入力できる担当） */
 export async function roundView(round: BudgetRound, user: SessionUser) {
   const db = useDb()
-  const [{ teams, latest, base, state, statusOf }, me, members] = await Promise.all([
+  const [{ bureaus, teams, latest, base, state, statusOf }, me, members] = await Promise.all([
     roundState(round),
     db.query.users.findFirst({ where: eq(schema.users.email, user.email) }),
     db.select({ email: schema.users.email, name: schema.users.name, bureau: schema.users.budgetBureau, team: schema.users.budgetTeam })
@@ -210,6 +222,7 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
   const editable = teams.filter(t => can(user.role, 'reviewBudget') || (me?.budgetBureau === t.bureau && me?.budgetTeam === t.team)).map(t => t.id)
   return {
     round,
+    bureaus,
     teams: teams.map(t => ({ ...t, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
     items,
     editableTeamIds: editable,
@@ -357,15 +370,25 @@ export async function startRound(kind: BudgetKind, user: SessionUser) {
 
   const now = new Date()
   const [round] = await db.insert(schema.budgetRounds).values({ term: BUDGET_TERM, kind, status: 'collecting', baseRoundId: base?.id ?? null, createdAt: now, createdBy: user.email }).returning()
-  const baseTeams = base ? await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, base.id)).orderBy(asc(schema.budgetTeams.sortOrder)) : []
-  // 局・担当：前の集約のもの。今の予算にしかない担当も足す
-  const teams = baseTeams.map(({ id: _, ...t }) => ({ ...t, roundId: round!.id }))
+  // 局・担当：前の集約のもの（局ごとに担当をまとめて）。今の予算にしかない局・担当も足す
+  const prev = base ? await teamsOf(base.id) : { bureaus: [], teams: [] }
+  const bureauRows = prev.bureaus.map(b => ({ oldId: b.id as number | null, bureauNo: b.bureauNo, name: b.name, sortOrder: b.sortOrder }))
+  const teamRows = prev.teams.map(t => ({ ...t, bureauName: prev.bureaus.find(b => b.id === t.bureauId)?.name ?? t.bureau }))
   for (const r of current) {
-    if (!teams.some(t => t.bureau === r.bureau && t.team === r.team)) {
-      teams.push({ roundId: round!.id, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, person: '', sortOrder: teams.length })
+    if (!bureauRows.some(b => b.name === r.bureau)) bureauRows.push({ oldId: null, bureauNo: bureauNoOf(r.itemNumber), name: r.bureau, sortOrder: bureauRows.length + 1e6 })
+    if (!teamRows.some(t => t.bureauName === r.bureau && t.team === r.team)) {
+      teamRows.push({ id: 0, roundId: 0, bureauId: null, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, person: '', sortOrder: teamRows.length + 1e6, bureauName: r.bureau })
     }
   }
-  if (teams.length) await db.insert(schema.budgetTeams).values(teams)
+  const newBureaus = bureauRows.length
+    ? await db.insert(schema.budgetBureaus).values(bureauRows.map(b => ({ roundId: round!.id, bureauNo: b.bureauNo, name: b.name, sortOrder: b.sortOrder }))).returning()
+    : []
+  if (teamRows.length) {
+    await db.insert(schema.budgetTeams).values(teamRows.map((t) => {
+      const b = newBureaus.find(x => x.name === t.bureauName)!
+      return { roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: t.team, person: '', sortOrder: t.sortOrder }
+    }))
+  }
   if (kind === '本予算') return round!
 
   const copies = current.map(r => ({ ...r, id: newId(), roundId: round!.id, status: 'draft' as const, createdAt: now, createdBy: user.email }))
@@ -436,6 +459,7 @@ export async function cancelRound(round: BudgetRound) {
     db.delete(schema.revisedBudgetItems).where(eq(schema.revisedBudgetItems.roundId, round.id)),
     db.delete(schema.budgetReviews).where(eq(schema.budgetReviews.roundId, round.id)),
     db.delete(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)),
+    db.delete(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, round.id)),
     db.delete(schema.budgetRounds).where(eq(schema.budgetRounds.id, round.id)),
   ])
 }
@@ -447,9 +471,9 @@ export async function cancelRound(round: BudgetRound) {
 export async function rebuildCurrentBudget(options: { settlePreExecutions?: boolean } = {}) {
   const db = useDb()
   const [rows, confirmed] = await Promise.all([currentRows(), latestConfirmedRound()])
-  const roundTeams = confirmed ? await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, confirmed.id)).orderBy(asc(schema.budgetTeams.sortOrder)) : []
-  // 局・担当の並び：確定した集約の順。そこにない担当は、項目の並びで後ろに足す
-  const teams = roundTeams.map(t => ({ id: t.id, bureauNo: t.bureauNo, bureau: t.bureau, team: t.team, person: '', sortOrder: t.sortOrder }))
+  const roundTeams = confirmed ? (await teamsOf(confirmed.id)).teams : []
+  // 局・担当の並び：確定した集約の順（局の並び → 担当の並び）。そこにない担当は、項目の並びで後ろに足す
+  const teams = roundTeams.map((t, i) => ({ id: t.id, bureauNo: t.bureauNo, bureau: t.bureau, team: t.team, person: '', sortOrder: i }))
   for (const r of [...rows].sort((a, b) => a.sortOrder - b.sortOrder)) {
     if (!teams.some(t => t.bureau === r.bureau && t.team === r.team)) {
       teams.push({ id: -teams.length - 1, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, person: '', sortOrder: 1e6 + teams.length })

@@ -134,6 +134,20 @@
       "when": 1793409539170,
       "tag": "0018_budget_db_v2_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1793412725874,
+      "tag": "0019_budget_bureaus",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1793412727958,
+      "tag": "0020_budget_bureaus_data",
+      "breakpoints": true
     }
   ]
 }

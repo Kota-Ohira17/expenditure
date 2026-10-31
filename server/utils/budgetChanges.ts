@@ -14,7 +14,7 @@ import type { SessionUser } from './auth'
 export async function currentBudget() {
   const db = useDb()
   const [rows, round] = await Promise.all([currentRows(), latestConfirmedRound()])
-  const teams = round ? await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)) : []
+  const teams = round ? (await teamsOf(round.id)).teams : []
   return { round, teams, rows }
 }
 
