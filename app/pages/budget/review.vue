@@ -182,7 +182,7 @@ async function approveAll(ids: string[]) {
             :status="itemStatusLabel(i)" :tone="STATUS_TONE[i.status]"
             :meta="`${i.number}　担当：${g.team.team}`"
             :title="`${i.kan} ／ ${itemName(i)}`"
-            :when="i.updatedAt" :note="i.reviewComment || i.remark || i.spec"
+            :when="i.updatedAt" :note="i.reviewComment"
           >
             <template #tags>
               <span class="tag">{{ changeOf(i).label }}</span>
@@ -193,6 +193,8 @@ async function approveAll(ids: string[]) {
             {{ formatYen(i.amount) }}<span v-if="i.baseAmount != null" class="base">（{{ view?.round.kind === '本予算' ? '昨年' : 'もとの予算' }} {{ formatYen(i.baseAmount) }}）</span>
             <span class="sub">{{ [i.quantity && `数量 ${i.quantity}`, i.unitPrice != null && `単価 ${formatYen(i.unitPrice)}`, i.vendor].filter(Boolean).join('・') }}</span>
             <template #footer>
+              <!-- 仕様・執行予定時期・リンク・備考は、書いてあればすべて出す -->
+              <BudgetItemDetails :item="i" class="item-details" />
               <div v-if="i.status === 'submitted'" class="actions">
                 <input v-model="comments[i.id]" class="comment" placeholder="コメント（要修正のときは必須）">
                 <button :disabled="busy !== null" @click="review(i.id, 'approve')">承認</button>
@@ -233,6 +235,7 @@ async function approveAll(ids: string[]) {
 .fold-all { display: flex; justify-content: flex-end; margin-bottom: .4rem; font-size: .85rem; }
 .more { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .4rem 1rem; padding-top: .8rem; font-size: .85rem; }
 .base { font-weight: 400; color: var(--muted); margin-left: .3rem; font-size: .85rem; }
+.item-details { margin: 0 0 .6rem; }
 .sub { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: .2rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .comment { flex: 1 1 16rem; max-width: none; }

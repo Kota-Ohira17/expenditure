@@ -168,13 +168,7 @@ function addTo(kan: string) {
                       {{ itemName(i) }}
                       <span v-if="i.isNew" class="tag fill pink">新規</span>
                       <span v-if="i.preExecution" class="tag fill yellow">予算前執行</span>
-                      <!-- 修正を開かなくても、書いた内容がすべて見えるようにする -->
-                      <dl v-if="i.spec || i.plannedTiming || i.link || i.remark" class="details">
-                        <template v-if="i.spec"><dt>仕様・詳細</dt><dd>{{ i.spec }}</dd></template>
-                        <template v-if="i.plannedTiming"><dt>執行予定時期</dt><dd>{{ i.plannedTiming }}</dd></template>
-                        <template v-if="i.link"><dt>リンク</dt><dd><a :href="i.link" target="_blank" rel="noopener noreferrer">{{ i.link }}</a></dd></template>
-                        <template v-if="i.remark"><dt>備考</dt><dd class="remark">{{ i.remark }}</dd></template>
-                      </dl>
+                      <BudgetItemDetails :item="i" />
                     </td>
                     <td>{{ i.quantity }}</td>
                     <td class="num">{{ formatYen(i.unitPrice) }}</td>
@@ -312,11 +306,6 @@ function addTo(kan: string) {
 .items .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .items .no { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .spec, .comment { display: block; font-size: .78rem; }
-/* 明細の仕様・執行予定時期・リンク・備考（修正を開かなくても見える） */
-.details { display: grid; grid-template-columns: auto 1fr; gap: .1rem .6rem; margin: .3rem 0 0; font-size: .78rem; }
-.details dt { color: var(--muted); white-space: nowrap; }
-.details dd { margin: 0; overflow-wrap: anywhere; }
-.details .remark { white-space: pre-wrap; }
 .items .tag { margin-left: .3rem; font-size: .72rem; }
 .comment { color: var(--danger); }
 .change.plus { color: var(--danger); }
