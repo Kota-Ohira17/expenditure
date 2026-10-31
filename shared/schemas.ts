@@ -241,9 +241,10 @@ export const budgetBureauSchema = z.object({
   name: required('局').pipe(z.string().max(30)),
 })
 
-/** 担当の名前を直す（財務管理部） */
+/** 担当の名前（英語の略称）と日本語名を直す（財務管理部） */
 export const budgetTeamSchema = z.object({
-  team: required('担当').pipe(z.string().max(50)),
+  team: required('担当（英語）').pipe(z.string().max(50)),
+  nameJa: z.string().trim().max(50).default(''),
 })
 
 /** 局の中に担当を足す（財務管理部） */

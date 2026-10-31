@@ -1,0 +1,1 @@
+ALTER TABLE `budget_teams` ADD `name_ja` text DEFAULT '' NOT NULL;

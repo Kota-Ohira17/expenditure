@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { BudgetRound, BudgetTeam } from '../db/schema'
 import type { SessionUser } from './auth'
 
@@ -74,11 +74,14 @@ export async function referenceFiles() {
  * 決算は項目番号で本予算の明細に合わせる（同じ番号が複数あれば、その番号の決算の合計を最初の明細に付ける）。
  * 本予算にない番号の決算は「予算外の決算」として並べる（これもコピーできる）。
  */
-export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+/** 取り込んだ明細の担当名として合わせる名前（英語の担当名と日本語名） */
+export const teamNamesOf = (team: Pick<BudgetTeam, 'team' | 'nameJa'>) => [...new Set([team.team, team.nameJa].filter(Boolean))]
+
+export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'bureau' | 'team' | 'nameJa'>) {
   const db = useDb()
   const [rows, state, files] = await Promise.all([
     db.select().from(schema.budgetReferences)
-      .where(and(eq(schema.budgetReferences.bureau, team.bureau), eq(schema.budgetReferences.team, team.team)))
+      .where(and(eq(schema.budgetReferences.bureau, team.bureau), inArray(schema.budgetReferences.team, teamNamesOf(team))))
       .orderBy(asc(schema.budgetReferences.kind), asc(schema.budgetReferences.sortOrder)),
     roundState(round),
     referenceFiles(),

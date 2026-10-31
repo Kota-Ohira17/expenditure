@@ -15,20 +15,23 @@ const groups = computed(() => (view.value?.bureaus ?? []).map(b => ({ bureau: b,
 
 /** 編集中の値（局と担当） */
 const bureauDrafts = reactive<Record<number, { bureauNo: string, name: string }>>({})
-const teamDrafts = reactive<Record<number, string>>({})
+const teamDrafts = reactive<Record<number, { team: string, nameJa: string }>>({})
 watchEffect(() => {
   for (const b of view.value?.bureaus ?? []) bureauDrafts[b.id] ??= { bureauNo: b.bureauNo, name: b.name }
-  for (const t of view.value?.teams ?? []) teamDrafts[t.id] ??= t.team
+  for (const t of view.value?.teams ?? []) teamDrafts[t.id] ??= { team: t.team, nameJa: t.nameJa }
 })
 const bureauChanged = (b: { id: number, bureauNo: string, name: string }) => !!bureauDrafts[b.id] && (bureauDrafts[b.id]!.bureauNo !== b.bureauNo || bureauDrafts[b.id]!.name !== b.name)
-const teamChanged = (t: BudgetTeamView) => teamDrafts[t.id] !== undefined && teamDrafts[t.id] !== t.team
+const teamChanged = (t: BudgetTeamView) => !!teamDrafts[t.id] && (teamDrafts[t.id]!.team !== t.team || teamDrafts[t.id]!.nameJa !== t.nameJa)
 
 const adding = reactive<Record<number, string>>({})
 // 「＋人の追加」が選ばれた状態で出す
 watchEffect(() => {
   for (const t of view.value?.teams ?? []) adding[t.id] ??= ''
 })
-const newTeams = reactive<Record<number, string>>({})
+const newTeams = reactive<Record<number, { team: string, nameJa: string }>>({})
+watchEffect(() => {
+  for (const b of view.value?.bureaus ?? []) newTeams[b.id] ??= { team: '', nameJa: '' }
+})
 const messages = reactive<Record<string, { ok: boolean, text: string }>>({})
 const busy = ref(false)
 
@@ -48,7 +51,7 @@ async function run(key: string, task: () => Promise<unknown>, done: string) {
   }
 }
 const saveBureau = (id: number) => run(`b${id}`, () => $fetch(`/api/budget/bureaus/${id}`, { method: 'PATCH', body: bureauDrafts[id] }), '局を保存しました（中の担当にも反映しました）。')
-const saveTeam = (id: number) => run(`t${id}`, () => $fetch(`/api/budget/teams/${id}`, { method: 'PATCH', body: { team: teamDrafts[id] } }), '保存しました。')
+const saveTeam = (id: number) => run(`t${id}`, () => $fetch(`/api/budget/teams/${id}`, { method: 'PATCH', body: teamDrafts[id] }), '保存しました。')
 const setMembers = (id: number, emails: string[]) => run(`t${id}`, () => $fetch(`/api/budget/teams/${id}/members`, { method: 'PUT', body: { emails } }), '割り当てを保存しました。')
 function addMember(t: BudgetTeamView) {
   const email = adding[t.id]
@@ -59,8 +62,8 @@ function addMember(t: BudgetTeamView) {
   setMembers(t.id, [...t.members.map(m => m.email), email])
 }
 const addTeam = (bureauId: number) => run(`b${bureauId}`, async () => {
-  await $fetch('/api/budget/teams', { method: 'POST', body: { bureauId, team: newTeams[bureauId] } })
-  newTeams[bureauId] = ''
+  await $fetch('/api/budget/teams', { method: 'POST', body: { bureauId, ...newTeams[bureauId] } })
+  newTeams[bureauId] = { team: '', nameJa: '' }
 }, '担当を足しました。')
 
 const newBureau = reactive({ name: '', bureauNo: '' })
@@ -94,12 +97,15 @@ const addBureau = () => run('new', async () => {
 
         <div class="table-wrap">
           <table class="teams">
-            <thead><tr><th>担当</th><th>入力する人</th></tr></thead>
+            <thead><tr><th>担当（英語・日本語名）</th><th>入力する人</th></tr></thead>
             <tbody>
               <tr v-for="t in g.teams" :key="t.id">
                 <td>
                   <div class="team">
-                    <input v-model.trim="teamDrafts[t.id]" class="w-s" :aria-label="`${t.team} の名前`">
+                    <template v-if="teamDrafts[t.id]">
+                      <input v-model.trim="teamDrafts[t.id]!.team" class="w-xs" :aria-label="`${t.team} の英語名`">
+                      <input v-model.trim="teamDrafts[t.id]!.nameJa" class="w-s" placeholder="日本語名" :aria-label="`${t.team} の日本語名`">
+                    </template>
                     <button class="secondary" :disabled="busy || !teamChanged(t)" @click="saveTeam(t.id)">保存</button>
                   </div>
                 </td>
@@ -125,8 +131,11 @@ const addBureau = () => run('new', async () => {
         </div>
 
         <form class="add-team" @submit.prevent="addTeam(g.bureau.id)">
-          <input v-model.trim="newTeams[g.bureau.id]" class="w-s" required :aria-label="`${g.bureau.name} に足す担当`">
-          <button type="submit" class="secondary" :disabled="busy || !newTeams[g.bureau.id]">＋ この局に担当を追加</button>
+          <template v-if="newTeams[g.bureau.id]">
+            <input v-model.trim="newTeams[g.bureau.id]!.team" class="w-xs" required placeholder="英語名" :aria-label="`${g.bureau.name} に足す担当の英語名`">
+            <input v-model.trim="newTeams[g.bureau.id]!.nameJa" class="w-s" placeholder="日本語名" :aria-label="`${g.bureau.name} に足す担当の日本語名`">
+          </template>
+          <button type="submit" class="secondary" :disabled="busy || !newTeams[g.bureau.id]?.team">＋ この局に担当を追加</button>
         </form>
       </section>
 

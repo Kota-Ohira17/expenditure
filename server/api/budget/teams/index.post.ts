@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   const teams = await db.select().from(schema.budgetTeams).where(eq(schema.budgetTeams.bureauId, bureau.id))
   if (teams.some(t => t.team === body.team)) throw createError({ statusCode: 409, message: 'その局に、同じ名前の担当がもうあります。' })
   const [team] = await db.insert(schema.budgetTeams).values({
-    roundId: round.id, bureauId: bureau.id, bureauNo: bureau.bureauNo, bureau: bureau.name, team: body.team,
+    roundId: round.id, bureauId: bureau.id, bureauNo: bureau.bureauNo, bureau: bureau.name, team: body.team, nameJa: body.nameJa,
     sortOrder: Math.max(-1, ...teams.map(t => t.sortOrder)) + 1,
   }).returning()
   return team

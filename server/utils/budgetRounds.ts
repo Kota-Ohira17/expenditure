@@ -377,7 +377,7 @@ export async function startRound(kind: BudgetKind, user: SessionUser) {
   for (const r of current) {
     if (!bureauRows.some(b => b.name === r.bureau)) bureauRows.push({ oldId: null, bureauNo: bureauNoOf(r.itemNumber), name: r.bureau, sortOrder: bureauRows.length + 1e6 })
     if (!teamRows.some(t => t.bureauName === r.bureau && t.team === r.team)) {
-      teamRows.push({ id: 0, roundId: 0, bureauId: null, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, person: '', sortOrder: teamRows.length + 1e6, bureauName: r.bureau })
+      teamRows.push({ id: 0, roundId: 0, bureauId: null, bureauNo: bureauNoOf(r.itemNumber), bureau: r.bureau, team: r.team, nameJa: '', person: '', sortOrder: teamRows.length + 1e6, bureauName: r.bureau })
     }
   }
   const newBureaus = bureauRows.length
@@ -386,7 +386,7 @@ export async function startRound(kind: BudgetKind, user: SessionUser) {
   if (teamRows.length) {
     await db.insert(schema.budgetTeams).values(teamRows.map((t) => {
       const b = newBureaus.find(x => x.name === t.bureauName)!
-      return { roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: t.team, person: '', sortOrder: t.sortOrder }
+      return { roundId: round!.id, bureauId: b.id, bureauNo: b.bureauNo, bureau: b.name, team: t.team, nameJa: t.nameJa, person: '', sortOrder: t.sortOrder }
     }))
   }
   if (kind === '本予算') return round!
