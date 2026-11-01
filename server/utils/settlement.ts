@@ -134,7 +134,11 @@ function settledLines(lines: BudgetLine[], done: DoneEntry[], extras: ReturnType
   const outside: SettledLine[] = []
   for (const entry of done) {
     if (!entry.items.length) {
-      outside.push(outsideLine(entry.itemNumber, entry.itemName, entry.amount, entry.quantity ?? '', '', [entry]))
+      // 予算にない項目として出した申請は、書いた款・項・目・節と担当を出す
+      const path = (entry.details as { budgetPath?: { kan?: string, kou?: string, moku?: string, setsu?: string } }).budgetPath
+      outside.push(path?.kan
+        ? { ...outsideLine(entry.itemNumber, entry.itemName, entry.amount, entry.quantity ?? '', '', [entry]), team: entry.inCharge, kan: path.kan, kou: path.kou ?? '', moku: path.moku ?? '', setsu: path.setsu ?? '' }
+        : outsideLine(entry.itemNumber, entry.itemName, entry.amount, entry.quantity ?? '', '', [entry]))
       continue
     }
     for (const item of entry.items) {

@@ -14,7 +14,7 @@ const dateTime = z.string({ error: '日時を入力してください。' }).reg
 const bureau = z.string({ error: '局を選んでください。' }).trim().min(1, '局を選んでください。').max(30)
 const yen = z.coerce.number({ error: '金額を数字で入力してください。' }).int('整数で入力してください。').positive('金額を入力してください。')
 
-export const ITEM_NUMBER_PATTERN = /^out-\d{2}(-\d{2}){1,2}$/
+export const ITEM_NUMBER_PATTERN = /^out-?\d{2}(-\d{2}){1,2}$/
 
 /**
  * 執行項目。予算明細から選ぶ（budgetLineKeys、複数可）か、予算にない場合は項目番号を手入力する。
@@ -28,6 +28,13 @@ const items = {
   itemQuantities: z.record(z.string(), z.string().trim().max(100)).default({}),
   itemVendors: z.record(z.string(), z.string().trim().max(100)).default({}),
   itemNumber: z.string().trim().default(''),
+  /** 予算にない項目の款・項・目・節（決算の「予算にない項目」に出す） */
+  budgetPath: z.object({
+    kan: z.string().trim().max(100).default(''),
+    kou: z.string().trim().max(100).default(''),
+    moku: z.string().trim().max(100).default(''),
+    setsu: z.string().trim().max(100).default(''),
+  }).default({ kan: '', kou: '', moku: '', setsu: '' }),
 }
 
 /**
@@ -40,14 +47,15 @@ export const itemsUpdateSchema = z.object({
   vendors: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
 })
 
-function checkItems(v: { budgetLineKeys: string[], itemNumber: string, preExecution: boolean, quantity?: string }, ctx: z.RefinementCtx) {
+function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, quantity?: string }, ctx: z.RefinementCtx) {
   // 予算から選んだときの数量は明細ごとに入力する（予算の表に数量がある明細だけ必須。サーバーで確認する）
   if (v.budgetLineKeys.length) return
   if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください。', path: ['quantity'] })
   // 予算前執行は、まだ予算の項目がないので選ばない（支出項目名だけ書く）
   if (v.preExecution) return
   if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '執行項目を予算から選んでください。', path: ['budgetLineKeys'] })
-  else if (!ITEM_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '項目番号は out-03-02-06 の形式で入力してください。', path: ['itemNumber'] })
+  else if (!v.budgetPath.kan) ctx.addIssue({ code: 'custom', message: '予算にない項目の款を入力してください。', path: ['budgetPath'] })
+  else if (!ITEM_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '項目番号は out01-03-02 の形式で入力してください。', path: ['itemNumber'] })
 }
 
 const base = z.object({
