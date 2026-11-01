@@ -25,7 +25,7 @@ function teamCard(t: BudgetTeamView) {
         : { label: '承認済み', tone: 'green' as const }
   const last = items.reduce<BudgetItemView | undefined>((a, b) => (!a || new Date(b.updatedAt) > new Date(a.updatedAt) ? b : a), undefined)
   const changed = items.filter(i => changeOf(i).kind !== 'same').length
-  return { s, status, last, changed, mine: collecting.value?.editableTeamIds.includes(t.id) && !reviewer.value }
+  return { s, status, last, changed, mine: collecting.value?.myTeamIds.includes(t.id) && !reviewer.value }
 }
 /** 自分の担当を先に、そのあと要修正・未提出・査定待ち・承認済みの順に並べる */
 const order = { red: 0, gray: 1, yellow: 2, green: 3 }
@@ -55,7 +55,7 @@ function toggleAll() {
   }
 }
 /** 自分が割り当てられた担当（財務管理部はどの担当も直せるので、一覧から入る） */
-const myTeams = computed(() => (collecting.value && !reviewer.value ? collecting.value.teams.filter(t => collecting.value!.editableTeamIds.includes(t.id)) : []))
+const myTeams = computed(() => (collecting.value && !reviewer.value ? collecting.value.teams.filter(t => collecting.value!.myTeamIds.includes(t.id)) : []))
 
 const errors = ref<string[]>([])
 const message = ref('')
@@ -169,7 +169,7 @@ function cancelRound() {
           </li>
         </ul>
       </div>
-      <p v-else-if="!reviewer" class="hint">あなたはまだ担当に割り当てられていません。財務管理部に、入力する担当を割り当ててもらってください。</p>
+      <p v-else-if="!reviewer" class="hint">明細の入力・提出はだれでもできます。下の「担当ごとの進み具合」から、入力する担当を開いてください。</p>
       <ReferenceImport v-if="reviewer && collecting.round.kind === '本予算'" />
 
       <h2>担当ごとの進み具合</h2>
