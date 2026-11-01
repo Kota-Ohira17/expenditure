@@ -47,7 +47,9 @@ export const itemsUpdateSchema = z.object({
   vendors: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
 })
 
-function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, quantity?: string }, ctx: z.RefinementCtx) {
+function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, preExecutionReason: string, quantity?: string }, ctx: z.RefinementCtx) {
+  // 予算前執行は、本予算の確定を待てない理由を必ず書く
+  if (v.preExecution && !v.preExecutionReason) ctx.addIssue({ code: 'custom', message: '予算前執行が必要な理由を入力してください。', path: ['preExecutionReason'] })
   // 予算から選んだときの数量は明細ごとに入力する（予算の表に数量がある明細だけ必須。サーバーで確認する）
   if (v.budgetLineKeys.length) return
   if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください。', path: ['quantity'] })
@@ -68,6 +70,8 @@ const base = z.object({
   budgetCommitteeApproved: z.boolean().default(false),
   /** 予算前執行（本予算が確定する前の執行。予算の表から選ばない） */
   preExecution: z.boolean().default(false),
+  /** 予算前執行が必要な理由（予算前執行のときは必須） */
+  preExecutionReason: z.string().trim().max(1000).default(''),
   remark: z.string().trim().default(''),
 })
 

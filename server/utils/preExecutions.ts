@@ -20,6 +20,7 @@ export async function recordPreExecution(entry: Entry, user: SessionUser) {
     bureau: bureauNameOf(entry.department),
     team: entry.inCharge,
     itemName: entry.itemName,
+    reason: String(entry.details.preExecutionReason ?? ''),
     amount: entry.amount ?? 0,
     status: 'approved',
     entryId: entry.id,

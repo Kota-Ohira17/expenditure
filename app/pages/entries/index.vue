@@ -80,6 +80,7 @@ const DETAIL_LABELS: Record<string, string> = {
   budgetChange: '予算からの変更',
   budgetCommitteeApproved: '役員会の承認',
   preExecution: '予算前執行',
+  preExecutionReason: '予算前執行が必要な理由',
   site: '通販サイト',
   url: '商品ページのリンク',
   deliveryPlace: '配達場所',
