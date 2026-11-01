@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
 
   const {
     type, applicantName, department, inCharge, budgetLineKeys, itemNumber: manualItemNumber, itemName, remark, deadline,
-    itemAmounts, itemQuantities, itemVendors: _itemVendors, budgetCommitteeApproved, preExecution,
+    itemAmounts, itemQuantities, itemVendors: _itemVendors, budgetCommitteeApproved, preExecution, budgetPath,
     ...rest
   } = input
   const { amount, quantity, ...details } = rest as typeof rest & { amount?: number, quantity?: string }
@@ -52,6 +52,8 @@ export default defineEventHandler(async (event) => {
       ...(budgetChange ? { budgetChange } : {}),
       ...(budgetChange === LARGE_INCREASE ? { budgetCommitteeApproved: true } : {}),
       ...(preExecution ? { preExecution: true } : {}),
+      // 予算にない項目は、款・項・目・節を残す（決算の「予算にない項目」に出す）
+      ...(!preExecution && !lines.length ? { budgetPath } : {}),
     },
     attachmentId,
   }, lines, input)

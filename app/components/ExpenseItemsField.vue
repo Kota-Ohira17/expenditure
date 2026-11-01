@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * 執行項目の入力欄（執行依頼で使う）。
- * 予算明細から複数選ぶのが基本で、予算にない項目は項目番号を手入力できる。
+ * 予算明細から複数選ぶのが基本で、予算にない項目は款・項・目・節と項目番号を手入力できる。
+ * 予算にない項目の項目番号は、局・担当・款を入れると予算の番号の付け方で候補を出す（手で直したらそれ以降は上書きしない）。
  * 支出項目名は選んだ明細から自動で入れる（手で直したらそれ以降は上書きしない）。
  * 明細ごとの実際の執行額は v-model:amounts（明細の key → 円）。
  */
@@ -11,7 +12,11 @@ const quantities = defineModel<Record<string, string>>('quantities', { required:
 const vendors = defineModel<Record<string, string>>('vendors', { required: true })
 const itemNumber = defineModel<string>('itemNumber', { required: true })
 const itemName = defineModel<string>('itemName', { required: true })
-defineProps<{
+const path = defineModel<{ kan: string, kou: string, moku: string, setsu: string }>('path', { required: true })
+const props = defineProps<{
+  /** フォームで選んだ局の略称と、書いた担当名（項目番号の候補に使う） */
+  bureau: string
+  team: string
   itemNameLabel: string
   /** 予算表で最初に開く局（フォームで選んだ局の略称） */
   preferredBureau?: string
@@ -20,6 +25,7 @@ defineProps<{
 const { data: lines } = await useBudgetLines()
 const manual = ref(false)
 const nameEdited = ref(false)
+const numberEdited = ref(false)
 
 const hasBudget = computed(() => lines.value.length > 0)
 const useManual = computed(() => manual.value || !hasBudget.value)
@@ -30,6 +36,21 @@ watch(keys, (k) => {
   itemName.value = itemNameFromLines(k.map(key => byKey.get(key)).filter(l => l != null), lines.value)
 })
 
+/** 予算にない項目：局・担当・款が変わったら項目番号の候補を取り直す */
+watch(() => [useManual.value, props.bureau, props.team, path.value.kan] as const, async ([m, bureau, team, kan]) => {
+  if (!m || numberEdited.value || !bureau || !team.trim()) return
+  try {
+    const { itemNumber: next } = await $fetch<{ itemNumber: string }>('/api/budget/next-number', { query: { bureau, team, kan } })
+    if (!numberEdited.value && next) itemNumber.value = next
+  }
+  catch { /* 候補が出せなくても手で入れられる */ }
+}, { immediate: true })
+/** 予算にない項目：支出項目名は款・項・目・節から作る（手で直したらそれ以降は上書きしない） */
+watch(path, (p) => {
+  if (!useManual.value || nameEdited.value) return
+  itemName.value = [p.kou || p.kan, p.moku, p.setsu].filter(Boolean).join(' / ')
+}, { deep: true })
+
 watch(useManual, (m) => {
   // 切り替えたらもう一方の入力は送らない
   if (m) {
@@ -38,7 +59,11 @@ watch(useManual, (m) => {
     quantities.value = {}
     vendors.value = {}
   }
-  else itemNumber.value = ''
+  else {
+    itemNumber.value = ''
+    path.value = { kan: '', kou: '', moku: '', setsu: '' }
+    numberEdited.value = false
+  }
 })
 </script>
 
@@ -46,9 +71,15 @@ watch(useManual, (m) => {
   <div class="items">
     <template v-if="useManual">
       <p v-if="!hasBudget" class="hint">予算がまだ取り込まれていないので、項目番号を手入力してください。</p>
+      <div class="path">
+        <label><span>款<span class="req">*</span></span><input v-model="path.kan" required></label>
+        <label>項<input v-model="path.kou"></label>
+        <label>目<input v-model="path.moku"></label>
+        <label>節<input v-model="path.setsu"></label>
+      </div>
       <label>項目番号
-        <span class="hint">項目番号は「out-AA-BB（-CC）」の形式で表されます。款でまとめて申請を行う場合はCCを含めなくて大丈夫です。outも含めてすべて半角で入力してください。</span>
-        <input v-model="itemNumber" placeholder="out-03-02-06" required>
+        <span class="hint">局・担当・款を入れると、予算の番号の付け方で候補が入ります（同じ担当・同じ款があればその款の続きの番号、なければその局の新しい款の番号）。必要なら書き換えてください。</span>
+        <input v-model="itemNumber" placeholder="out01-03-02" required @input="numberEdited = true">
       </label>
     </template>
     <BudgetPicker
@@ -73,4 +104,6 @@ watch(useManual, (m) => {
 
 <style scoped>
 .items { display: grid; gap: .75rem; }
+.path { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem; }
+.req { color: var(--danger); margin-left: .15rem; }
 </style>

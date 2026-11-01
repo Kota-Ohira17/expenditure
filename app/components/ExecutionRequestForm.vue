@@ -19,6 +19,7 @@ const form = reactive({
   itemQuantities: {} as Record<string, string>,
   itemVendors: {} as Record<string, string>,
   itemNumber: '',
+  budgetPath: { kan: '', kou: '', moku: '', setsu: '' },
   itemName: '',
   budgetCommitteeApproved: false,
   remark: '',
@@ -122,6 +123,7 @@ function buildPayload() {
     itemQuantities: form.itemQuantities,
     itemVendors: form.itemVendors,
     itemNumber: form.itemNumber,
+    budgetPath: form.budgetPath,
     itemName: form.itemName,
     budgetCommitteeApproved: budgetSummary.value?.change === LARGE_INCREASE && form.budgetCommitteeApproved,
     remark: form.remark,
@@ -196,6 +198,9 @@ async function onSubmit() {
           v-model:vendors="form.itemVendors"
             v-model:item-number="form.itemNumber"
             v-model:item-name="form.itemName"
+            v-model:path="form.budgetPath"
+            :bureau="form.department"
+            :team="form.inCharge"
           :preferred-bureau="tabBureau"
             item-name-label="支出項目名"
           />
