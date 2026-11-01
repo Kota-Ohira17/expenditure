@@ -90,6 +90,7 @@ export const VIEWS = {
   deadline: '期限順',
   pending: '執行待ち',
   noEvidence: '証憑未提出',
+  evidenceCheck: '証憑確認待ち',
   振込: '振込',
   発注: '発注',
   立替: '立替',

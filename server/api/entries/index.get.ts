@@ -29,6 +29,13 @@ export default defineEventHandler(async (event) => {
     conds.push(sql`not exists (select 1 from ${schema.evidenceFiles} where ${schema.evidenceFiles.entryId} = ${e.id})`)
     orderBy = byDeadline
   }
+  else if (view === 'evidenceCheck') {
+    // 対応済みで証憑が付いていて、まだ確認も差し戻しもしていない申請
+    conds.push(eq(e.status, 'done'))
+    conds.push(sql`${e.evidenceCheckedAt} is null and ${e.evidenceReturnComment} = ''`)
+    conds.push(sql`((${e.kind} = 'execution' and exists (select 1 from ${schema.evidenceFiles} where ${schema.evidenceFiles.entryId} = ${e.id})) or (${e.kind} = 'evidence' and ${e.attachmentId} is not null))`)
+    orderBy = byDeadline
+  }
   else if (view === 'pending') {
     conds.push(eq(e.status, 'pending'))
     orderBy = byDeadline

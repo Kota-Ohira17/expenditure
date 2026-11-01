@@ -180,6 +180,8 @@ td small { color: var(--muted); }
 .badge.pending { color: var(--danger); font-weight: 600; }
 .badge.done { color: #9a6b00; font-weight: 600; }
 .badge.complete { color: var(--done); }
+.badge.checking { color: #2f6fd6; font-weight: 600; }
+.badge.returned { color: var(--danger); font-weight: 600; }
 .executed-at { display: block; color: var(--muted); font-size: .75rem; white-space: nowrap; }
 
 dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: 0 0 1rem; }

@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-/** 間違えて付けた証憑を外す（付けた本人か、財務局長・管理者） */
+/** 間違えて付けた証憑を外す（付けた本人か、財務局長・管理者）。証憑が変わるので、確認済みは外して確認待ちに戻す */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
   await db.batch([
     db.delete(schema.evidenceFiles).where(eq(schema.evidenceFiles.id, fileId)),
     db.delete(schema.attachments).where(eq(schema.attachments.id, ev.attachmentId)),
+    db.update(schema.entries).set({ evidenceCheckedAt: null, evidenceCheckedBy: null }).where(eq(schema.entries.id, id)),
   ])
   return (await evidencesOf([id])).get(id) ?? []
 })
