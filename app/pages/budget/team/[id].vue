@@ -129,7 +129,6 @@ function addTo(kan: string) {
         </div>
         <p v-if="editable && !reviewer && phase === 'closed'" class="hint">集約は終了しました。査定が始まると、要修正になった明細だけ直して出し直せます。</p>
         <p v-if="editable && !reviewer && phase === 'reviewing'" class="hint">査定中です。要修正になった明細だけ直して出し直せます。</p>
-        <p v-if="!editable && open" class="hint">この担当の明細は見るだけです（入力できるのは、この担当に割り当てられた人と財務管理部です）。</p>
       </div>
 
       <section class="mine">

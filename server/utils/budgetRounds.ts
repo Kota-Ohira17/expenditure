@@ -237,7 +237,9 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
       updatedAt: r.createdAt,
     }]
   }).sort((a, b) => (teamOrder.get(a.teamId)! - teamOrder.get(b.teamId)!) || a.sortOrder - b.sortOrder)
-  const editable = teams.filter(t => can(user.role, 'reviewBudget') || (me?.budgetBureau === t.bureau && me?.budgetTeam === t.team)).map(t => t.id)
+  // 明細の入力・提出はだれでもできる。「あなたの担当」には、割り当てられた担当を出す
+  const editable = teams.map(t => t.id)
+  const mine = teams.filter(t => me?.budgetBureau === t.bureau && me?.budgetTeam === t.team).map(t => t.id)
   return {
     round,
     bureaus,
@@ -245,11 +247,17 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
     teams: teams.map(t => ({ ...t, listed: listed(t), department: departments.find(d => d.id === t.departmentId) ?? null, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
     items,
     editableTeamIds: editable,
+    myTeamIds: mine,
   }
 }
 
-/** その担当の明細を入力できるか（その担当に割り当てられた人と、財務管理部・財務局長・管理者） */
-export async function canEditTeam(user: SessionUser, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+/** その担当の集約の明細を入力・提出できるか。ログインしていればだれでもできる */
+export async function canEditTeam(_user: SessionUser, _team: Pick<BudgetTeam, 'bureau' | 'team'>) {
+  return true
+}
+
+/** その担当の予算の変更を申請できるか（その担当に割り当てられた人と、財務管理部・財務局長・管理者） */
+export async function canRequestChange(user: SessionUser, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
   if (can(user.role, 'reviewBudget')) return true
   const me = await useDb().query.users.findFirst({ where: eq(schema.users.email, user.email) })
   return !!me && me.budgetBureau === team.bureau && me.budgetTeam === team.team

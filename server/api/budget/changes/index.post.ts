@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
       return r ? { bureau: r.bureau, team: r.team } : null
     })()
   if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
-  if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の予算は変更を申請できません。' })
+  if (!(await canRequestChange(user, team))) throw createError({ statusCode: 403, message: 'この担当の予算は変更を申請できません。' })
   const draft = { kind: body.kind, bureau: team.bureau, team: team.team, itemNumber: body.kind === 'add' ? '' : body.itemNumber!, after: body.values ?? null }
   const { row } = await checkChange(draft)
   await assertNoPending(draft.itemNumber)
