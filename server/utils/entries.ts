@@ -109,7 +109,7 @@ export function toPublicEntry<T extends Entry>(entry: T, showBank: boolean): T {
 
 /** n8n/Slack に渡す内容。口座情報は常に除外する */
 export function toNotification(entry: Entry & { items?: EntryItem[] }) {
-  const { applicantEmail: _email, attachmentId, executedBy: _by, items, ...rest } = entry
+  const { applicantEmail: _email, attachmentId, executedBy: _by, evidenceCheckedBy: _checkedBy, items, ...rest } = entry
   return {
     ...rest,
     details: withoutBank(entry.details),

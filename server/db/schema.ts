@@ -46,6 +46,11 @@ export const entries = sqliteTable('entries', {
   paymentMethod: text('payment_method'),
   executedAt: integer('executed_at', { mode: 'timestamp_ms' }),
   executedBy: text('executed_by'),
+  /** 証憑を確認した時刻と人（財務局長・管理者）。証憑を付け直す・外すと空に戻る（確認待ち） */
+  evidenceCheckedAt: integer('evidence_checked_at', { mode: 'timestamp_ms' }),
+  evidenceCheckedBy: text('evidence_checked_by'),
+  /** 証憑を差し戻したときの理由。証憑を付け直すと空に戻る */
+  evidenceReturnComment: text('evidence_return_comment').notNull().default(''),
 })
 
 export const counters = sqliteTable('counters', {

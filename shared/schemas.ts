@@ -121,6 +121,13 @@ export const evidenceUploadSchema = z.object({
 })
 export type EvidenceUploadInput = z.input<typeof evidenceUploadSchema>
 
+/** 証憑の確認（財務局長・管理者）。差し戻しは理由が必須 */
+export const evidenceCheckSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('confirm') }),
+  z.object({ action: z.literal('undo') }),
+  z.object({ action: z.literal('return'), comment: required('差し戻しの理由').pipe(z.string().max(500)) }),
+])
+
 export const executeSchema = z.object({
   done: z.boolean(),
   /** 振込のときに使った口座 */

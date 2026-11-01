@@ -38,11 +38,17 @@ type Row = NonNullable<typeof entries.value>[number]
 /** 証憑が出ているか（執行依頼は台帳から付けた証憑、以前の証憑提出フォームの申請はその添付） */
 const hasEvidence = (row: Row) => (row.kind === 'execution' ? row.evidences.length > 0 : Boolean(row.attachmentId))
 /**
- * 状態：執行待ち（ZAI の対応前）→ 証憑提出待ち（ZAI が執行した、証憑はまだ）→ 完了（証憑もそろった）。
+ * 状態：執行待ち（ZAI の対応前）→ 証憑提出待ち（ZAI が執行した、証憑はまだ）→ 証憑確認待ち（証憑が出た）→ 完了（財務局長・管理者が証憑を確認した）。
  * 証憑が先に出ていても、ZAI が対応するまでは「執行待ち」（立替の返金待ちなど）。
+ * 差し戻すと「証憑差し戻し」になり、証憑を付け直すとまた確認待ちになる。
  */
-const STAGE_LABELS = { pending: '執行待ち', done: '証憑提出待ち', complete: '完了' } as const
-const stageOf = (row: Row): keyof typeof STAGE_LABELS => (row.status !== 'done' ? 'pending' : hasEvidence(row) ? 'complete' : 'done')
+const STAGE_LABELS = { pending: '執行待ち', done: '証憑提出待ち', returned: '証憑差し戻し', checking: '証憑確認待ち', complete: '完了' } as const
+function stageOf(row: Row): keyof typeof STAGE_LABELS {
+  if (row.status !== 'done') return 'pending'
+  if (row.evidenceCheckedAt) return 'complete'
+  if (row.evidenceReturnComment) return 'returned'
+  return hasEvidence(row) ? 'checking' : 'done'
+}
 const evidenceStatus = (row: Row) => (row.kind === 'execution'
   ? (row.evidences.length ? `${row.evidences.length}件` : '未提出')
   : (row.attachmentId ? 'あり' : '未提出'))
@@ -281,6 +287,7 @@ async function setDone(row: Row, done: boolean) {
             </tr>
             <tr v-if="opened === row.id" class="detail">
               <td colspan="11">
+                <EvidenceCheck :entry="row" :has-evidence="hasEvidence(row)" @changed="refresh" />
                 <EvidenceSection v-if="row.kind === 'execution'" :entry="row" @changed="refresh" />
                 <ShippingNotice
                   v-if="row.type === '発注' && row.status === 'pending'"

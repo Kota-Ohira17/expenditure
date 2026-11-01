@@ -47,6 +47,9 @@ export default defineEventHandler(async (event) => {
           executedAt: null,
           executedBy: null,
           paymentMethod: entry.kind === 'evidence' ? '立替' : null,
+          // 執行待ちに戻したら、証憑の確認もやり直す
+          evidenceCheckedAt: null,
+          evidenceCheckedBy: null,
         })
     .where(eq(e.id, id))
     .returning()
