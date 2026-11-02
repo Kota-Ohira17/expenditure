@@ -69,6 +69,12 @@ const base = z.object({
   itemName: required('支出項目名'),
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
   budgetCommitteeApproved: z.boolean().default(false),
+  /**
+   * 明細の金額が予算額と違うとき、予算の変更（②）も申請するか。違う明細があるときは、はい・いいえのどちらかが要る（サーバーで確かめる）。
+   * 申請するときの理由（書かなければ、執行依頼の番号と金額から作る）
+   */
+  requestBudgetChange: z.boolean().nullish(),
+  budgetChangeReason: z.string().trim().max(1000).default(''),
   /** 予算前執行（本予算が確定する前の執行。予算の表から選ばない） */
   preExecution: z.boolean().default(false),
   /** 予算前執行が必要な理由（予算前執行のときは必須） */

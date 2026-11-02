@@ -4,11 +4,13 @@
  * pre（予算前執行）のときは、本予算が確定する前なので予算の表から選ばず、支出項目名だけ書く。ほかは同じ。
  */
 import {
-  ACCOUNT_TYPES, budgetChangeOfItems, LARGE_INCREASE, DELIVERY_PLACES, METHOD_GROUPS, ONLINE_SITES, OTHER_METHODS, PAPER_RECEIPT,
+  ACCOUNT_TYPES, budgetChangeOfItems, changedItems, LARGE_INCREASE, DELIVERY_PLACES, METHOD_GROUPS, ONLINE_SITES, OTHER_METHODS, PAPER_RECEIPT,
 } from '#shared/constants'
 const props = defineProps<{ pre?: boolean }>()
 const { user } = useUserSession()
-const { submit, errors, pending } = useSubmit<{ seq: string }>('/api/entries')
+/** 予算の変更を申請したときの結果（申請した項目番号と、申請できなかった項目番号と理由） */
+type BudgetChangeResult = { created: string[], skipped: { itemNumber: string, reason: string }[] } | null
+const { submit, errors, pending } = useSubmit<{ seq: string, budgetChangeRequests: BudgetChangeResult }>('/api/entries')
 
 const form = reactive({
   applicantName: user.value?.name ?? '',
@@ -22,6 +24,9 @@ const form = reactive({
   budgetPath: { kan: '', kou: '', moku: '', setsu: '' },
   itemName: '',
   budgetCommitteeApproved: false,
+  /** 金額が予算額と違う明細があるとき、予算の変更も申請するか（'yes' / 'no'。選ぶまで空） */
+  requestBudgetChange: '' as '' | 'yes' | 'no',
+  budgetChangeReason: '',
   preExecutionReason: '',
   remark: '',
   amount: '',
@@ -47,6 +52,7 @@ const methodGroup = ref('')
 const file = ref<File | null>(null)
 const confirmed = ref(false)
 const done = ref<string>()
+const changeResult = ref<BudgetChangeResult>(null)
 
 useBureauFromItems(toRef(form, 'budgetLineKeys'), toRef(form, 'department'))
 /** 予算の表で開く局。自分で局を選んだときだけ変える（明細から局が自動で入ったときは表を動かさない） */
@@ -106,6 +112,12 @@ const diffYen = computed(() => {
   const d = (budgetSummary.value?.actual ?? 0) - (budgetSummary.value?.budget ?? 0)
   return `${d > 0 ? '+' : d < 0 ? '-' : '±'}¥${Math.abs(d).toLocaleString('ja-JP')}`
 })
+/** 金額が予算額と違う明細（予算の変更を申請するかを聞く） */
+const changedLines = computed(() => {
+  if (!hasItems.value) return []
+  const byKey = new Map(budgetLines.value.map(l => [l.key, l]))
+  return changedItems(form.budgetLineKeys.map(k => byKey.get(k)).filter(l => l != null), form.itemAmounts)
+})
 /** 1万円以上の増額なのに、役員会の承認にチェックがない */
 const needsApproval = computed(() => budgetSummary.value?.change === LARGE_INCREASE && !form.budgetCommitteeApproved)
 
@@ -127,6 +139,8 @@ function buildPayload() {
     budgetPath: form.budgetPath,
     itemName: form.itemName,
     budgetCommitteeApproved: budgetSummary.value?.change === LARGE_INCREASE && form.budgetCommitteeApproved,
+    requestBudgetChange: changedLines.value.length ? form.requestBudgetChange === 'yes' : null,
+    budgetChangeReason: changedLines.value.length && form.requestBudgetChange === 'yes' ? form.budgetChangeReason : '',
     remark: form.remark,
     preExecution: !!props.pre,
     preExecutionReason: props.pre ? form.preExecutionReason : '',
@@ -148,7 +162,10 @@ function buildPayload() {
 
 async function onSubmit() {
   const result = await submit(buildPayload(), methodGroup.value === '振込' ? file.value : null)
-  if (result) done.value = result.seq
+  if (result) {
+    done.value = result.seq
+    changeResult.value = result.budgetChangeRequests
+  }
 }
 </script>
 
@@ -158,6 +175,15 @@ async function onSubmit() {
 
     <div v-if="done" class="success">
       <p>受け付けました（受付番号 {{ done }}）。</p>
+      <template v-if="changeResult">
+        <p v-if="changeResult.created.length">
+          予算の変更も申請しました（{{ changeResult.created.join('・') }}）。財務管理部が承認すると予算に反映されます。進み具合は「<NuxtLink to="/budget/changes">予算の変更</NuxtLink>」で見られます。
+        </p>
+        <div v-if="changeResult.skipped.length" class="error">
+          <p>次の項目は予算の変更を申請できませんでした。必要なら「予算の変更」から申請してください。</p>
+          <ul><li v-for="s in changeResult.skipped" :key="s.itemNumber">{{ s.itemNumber }}：{{ s.reason }}</li></ul>
+        </div>
+      </template>
       <NuxtLink to="/entries">申請一覧へ</NuxtLink>
     </div>
 
@@ -346,6 +372,23 @@ async function onSubmit() {
             役員会の承認を得ました<span class="req">*</span>
           </label>
           <p v-if="budgetSummary.change === LARGE_INCREASE" class="hint">1万円以上の増額は、役員会の承認を得てから申請してください。</p>
+
+          <div v-if="changedLines.length" class="change-request">
+            <span class="block-label">予算の変更も申請しますか？<span class="req">*</span></span>
+            <p class="hint">次の明細は、金額が予算額と違います。「はい」にすると、この執行依頼と一緒に、予算の金額を執行額に直す予算の変更を申請します（財務管理部が承認すると予算に反映されます）。</p>
+            <ul class="changed-lines">
+              <li v-for="c in changedLines" :key="c.line.key">
+                <span class="muted">{{ c.line.itemNumber }}</span> {{ c.line.label }}：{{ formatYen(c.line.budgetAmount) }} → {{ formatYen(c.actual) }}
+              </li>
+            </ul>
+            <div class="choices">
+              <label class="check"><input v-model="form.requestBudgetChange" type="radio" value="yes" name="request-budget-change" required> はい（予算の変更も申請する）</label>
+              <label class="check"><input v-model="form.requestBudgetChange" type="radio" value="no" name="request-budget-change"> いいえ（執行依頼だけ）</label>
+            </div>
+            <label v-if="form.requestBudgetChange === 'yes'">変更の理由<span class="hint">書かなければ、執行依頼の番号と金額を理由にします。</span>
+              <textarea v-model="form.budgetChangeReason" rows="2" />
+            </label>
+          </div>
         </div>
         <div class="confirm">
           <span class="block-label">以上の内容に誤りがないことを確認しましたか？<span class="req">*</span></span>
@@ -353,13 +396,16 @@ async function onSubmit() {
           <label class="check"><input v-model="confirmed" type="checkbox"> はい</label>
         </div>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
-        <button type="submit" :disabled="!confirmed || pending || needsApproval">{{ pending ? '送信中…' : '送信' }}</button>
+        <button type="submit" :disabled="!confirmed || pending || needsApproval || (changedLines.length > 0 && !form.requestBudgetChange)">{{ pending ? '送信中…' : '送信' }}</button>
       </template>
     </form>
   </section>
 </template>
 
 <style scoped>
+.change-request { display: grid; gap: .4rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px dashed var(--border); }
+.changed-lines { margin: 0; padding-left: 1.2rem; font-size: .88rem; }
+.choices { display: flex; flex-wrap: wrap; gap: 1rem; }
 .intro { border-left: 4px solid var(--accent); padding: .5rem .9rem; font-size: .9rem; background: var(--sub); border-radius: 0 6px 6px 0; }
 .intro p { margin: .3rem 0; }
 .intro ul { margin: .2rem 0; padding-left: 1.4rem; }
