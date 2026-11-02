@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { EVIDENCE_KINDS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
+import { EVIDENCE_KINDS, INCOME_FILE_KINDS, INCOME_METHODS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
 
 const required = (label: string) => {
   const message = `${label}を入力してください。`
@@ -47,7 +47,9 @@ export const itemsUpdateSchema = z.object({
   vendors: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
 })
 
-function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, quantity?: string }, ctx: z.RefinementCtx) {
+function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, preExecutionReason: string, quantity?: string }, ctx: z.RefinementCtx) {
+  // 予算前執行は、本予算の確定を待てない理由を必ず書く
+  if (v.preExecution && !v.preExecutionReason) ctx.addIssue({ code: 'custom', message: '予算前執行が必要な理由を入力してください。', path: ['preExecutionReason'] })
   // 予算から選んだときの数量は明細ごとに入力する（予算の表に数量がある明細だけ必須。サーバーで確認する）
   if (v.budgetLineKeys.length) return
   if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください。', path: ['quantity'] })
@@ -68,6 +70,8 @@ const base = z.object({
   budgetCommitteeApproved: z.boolean().default(false),
   /** 予算前執行（本予算が確定する前の執行。予算の表から選ばない） */
   preExecution: z.boolean().default(false),
+  /** 予算前執行が必要な理由（予算前執行のときは必須） */
+  preExecutionReason: z.string().trim().max(1000).default(''),
   remark: z.string().trim().default(''),
 })
 
@@ -121,6 +125,46 @@ export type ExecutionRequestInput = z.input<typeof executionRequestSchema>
  * 台帳から証憑を付けるときの入力（ファイルは別に送る）。
  * 金額・日付は分かれば入れる。返金時期は立替のときだけ。
  */
+/** 収入の項目番号（in01-01-01。予算にない収入を手入力するとき） */
+export const INCOME_NUMBER_PATTERN = /^in-?\d{2}(-\d{2}){1,2}$/
+
+/**
+ * 収入の記録。収入の予算明細を1つ選ぶ（budgetLineKey）か、予算にない収入として款（必須）〜節と項目番号（in から始まる）を書く。
+ */
+export const incomeSchema = z.object({
+  applicantName: required('記録する人の氏名'),
+  department: bureau,
+  inCharge: required('担当名'),
+  budgetLineKey: z.string().trim().default(''),
+  itemNumber: z.string().trim().default(''),
+  budgetPath: z.object({
+    kan: z.string().trim().max(100).default(''),
+    kou: z.string().trim().max(100).default(''),
+    moku: z.string().trim().max(100).default(''),
+    setsu: z.string().trim().max(100).default(''),
+  }).default({ kan: '', kou: '', moku: '', setsu: '' }),
+  itemName: required('収入項目名'),
+  amount: yen,
+  receivedOn: date,
+  payer: z.string().trim().max(200).default(''),
+  method: z.enum(INCOME_METHODS, { error: '受け取り方を選んでください。' }),
+  remark: z.string().trim().max(1000).default(''),
+}).superRefine((v, ctx) => {
+  if (v.budgetLineKey) return
+  if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '収入の項目を予算から選んでください。', path: ['budgetLineKey'] })
+  else if (!v.budgetPath.kan) ctx.addIssue({ code: 'custom', message: '予算にない収入の款を入力してください。', path: ['budgetPath'] })
+  else if (!INCOME_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '収入の項目番号は in01-03-02 の形式で入力してください。', path: ['itemNumber'] })
+})
+export type IncomeInput = z.input<typeof incomeSchema>
+
+/** 収入の証憑を付ける */
+export const incomeFileSchema = z.object({
+  kind: z.enum(INCOME_FILE_KINDS, { error: '証憑の種類を選んでください。' }),
+})
+
+/** 入金を確かめた（done: true）／確認待ちに戻す（false）（財務局長・管理者） */
+export const incomeConfirmSchema = z.object({ done: z.boolean() })
+
 export const evidenceUploadSchema = z.object({
   kind: z.enum(EVIDENCE_KINDS, { error: '証憑の種類を選んでください。' }),
   amount: z.union([z.literal(''), yen]).default(''),
@@ -165,6 +209,8 @@ export const budgetRoundStartSchema = z.object({
 
 /** 予算の明細（担当が入力する）。金額は負の数も入れられる（企画納入など） */
 export const budgetItemSchema = z.object({
+  /** 収入か支出か（足すときだけ使う。直すときは項目番号の頭で決まっていて変えられない） */
+  flow: z.enum(['income', 'expense']).default('expense'),
   kan: required('款').pipe(z.string().max(100)),
   kou: z.string().trim().max(100).default(''),
   moku: z.string().trim().max(100).default(''),

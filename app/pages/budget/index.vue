@@ -7,6 +7,7 @@ const { can } = usePermissions()
 const reviewer = computed(() => can('reviewBudget'))
 const { data: view, refresh } = await useBudgetRound()
 const { data: lines, refresh: refreshLines } = await useBudgetLines()
+const { data: incomeLines, refresh: refreshIncome } = await useIncomeLines()
 const budgetKind = useBudgetKind()
 
 const collecting = computed(() => view.value && view.value.round.status !== 'confirmed' ? view.value.round : null)
@@ -27,7 +28,7 @@ async function seed() {
   try {
     await $fetch('/api/budget-lines/import', { method: 'POST', body: form })
     message.value = '最初の予算を取り込みました。「集約」から次の予算の集約を始められます。'
-    await Promise.all([refresh(), refreshLines()])
+    await Promise.all([refresh(), refreshLines(), refreshIncome()])
   }
   catch (error) {
     errors.value = toMessages(error)
@@ -43,6 +44,11 @@ const filtered = computed(() => {
   return lines.value.filter(l => words.every(w => `${l.itemNumber} ${l.bureau} ${l.team} ${l.kan} ${l.label} ${l.vendor}`.toLowerCase().includes(w)))
 })
 const total = computed(() => lines.value.reduce((s, l) => s + l.budgetAmount, 0))
+const incomeTotal = computed(() => incomeLines.value.reduce((s, l) => s + l.budgetAmount, 0))
+const filteredIncome = computed(() => {
+  const words = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  return incomeLines.value.filter(l => words.every(w => `${l.itemNumber} ${l.bureau} ${l.team} ${l.kan} ${l.label} ${l.vendor}`.toLowerCase().includes(w)))
+})
 </script>
 
 <template>
@@ -56,9 +62,14 @@ const total = computed(() => lines.value.reduce((s, l) => s + l.budgetAmount, 0)
       確定するまで、執行依頼では下の予算から選びます。
     </p>
 
-    <template v-if="lines.length">
-      <p>確定した{{ budgetKind }}：{{ lines.length }}件の明細（合計 {{ formatYen(total) }}）。執行依頼ではこの予算から選びます。</p>
+    <template v-if="lines.length || incomeLines.length">
+      <p>確定した{{ budgetKind }}：収入 {{ incomeLines.length }}件（合計 {{ formatYen(incomeTotal) }}）・支出 {{ lines.length }}件（合計 {{ formatYen(total) }}）。執行依頼では支出の予算から、収入の記録では収入の予算から選びます。</p>
       <input v-model="query" type="search" class="search" placeholder="絞り込み（項目番号・局・担当・名前・取引先）">
+      <template v-if="incomeLines.length">
+        <h2 class="flow">収入の部</h2>
+        <BudgetTable :lines="filteredIncome" />
+      </template>
+      <h2 class="flow">支出の部</h2>
       <BudgetTable :lines="filtered" fixed-height />
     </template>
 
@@ -91,4 +102,5 @@ const total = computed(() => lines.value.reduce((s, l) => s + l.budgetAmount, 0)
 .kind { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
 .search { max-width: 420px; margin-bottom: .75rem; }
 .ok { color: var(--done); }
+.flow { font-size: 1.05rem; margin: 1rem 0 .5rem; }
 </style>

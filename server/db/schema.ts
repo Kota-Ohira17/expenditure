@@ -149,6 +149,56 @@ export const evidenceFiles = sqliteTable('evidence_files', {
 export type EvidenceFile = typeof evidenceFiles.$inferSelect
 
 /**
+ * 収入の記録（入ってきたお金。協賛金・売上など）。支出の執行依頼にあたる。
+ * 収入の予算明細（項目番号が in から始まる）から1つ選ぶか、予算にない収入として款〜節と項目番号を書く。
+ * 財務局長・管理者が入金を確かめると確認済みになる。
+ */
+export const incomeRecords = sqliteTable('income_records', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** 表示用の通し番号（I-001） */
+  seq: text('seq').notNull().unique(),
+  /** pending＝入金の確認待ち、done＝確認済み */
+  status: text('status', { enum: ['pending', 'done'] }).notNull().default('pending'),
+  applicantEmail: text('applicant_email').notNull(),
+  applicantName: text('applicant_name').notNull(),
+  /** 局（略称） */
+  department: text('department').notNull(),
+  inCharge: text('in_charge').notNull(),
+  /** 選んだ収入の予算明細（budget_lines.key）。予算にない収入なら null */
+  lineKey: text('line_key'),
+  itemNumber: text('item_number').notNull(),
+  itemName: text('item_name').notNull(),
+  /** 記録したときの予算額（予算にない収入なら null） */
+  budgetAmount: integer('budget_amount'),
+  /** 入ってきた金額 */
+  amount: integer('amount').notNull(),
+  /** 入金日 */
+  receivedOn: text('received_on').notNull(),
+  /** 相手先（協賛企業・購入者など） */
+  payer: text('payer').notNull().default(''),
+  /** 受け取り方（振込・現金・その他） */
+  method: text('method').notNull(),
+  remark: text('remark').notNull().default(''),
+  /** 予算にない収入の款・項・目・節（budgetPath）など */
+  details: text('details', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
+  confirmedAt: integer('confirmed_at', { mode: 'timestamp_ms' }),
+  confirmedBy: text('confirmed_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type IncomeRecord = typeof incomeRecords.$inferSelect
+
+/** 収入の証憑（入金の明細・領収書の控えなど。1件の収入に何枚でも） */
+export const incomeFiles = sqliteTable('income_files', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  incomeId: integer('income_id').notNull().references(() => incomeRecords.id),
+  attachmentId: integer('attachment_id').notNull().references(() => attachments.id),
+  kind: text('kind').notNull(),
+  uploadedBy: text('uploaded_by').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+/**
  * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。
  * 環境変数 NUXT_ADMIN_EMAILS のユーザーはログインのたびに管理者に戻る（最初の管理者を作るため）。
  */

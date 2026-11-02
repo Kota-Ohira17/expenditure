@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
   const bureau = bureauNameOf(String(query.bureau ?? '').trim())
   const name = String(query.team ?? '').trim().toLowerCase()
   const kan = String(query.kan ?? '').trim()
+  const flow = query.flow === 'income' ? 'income' : 'expense'
   if (!bureau || !name) return { itemNumber: '' }
 
   const round = (await openRound()) ?? (await latestConfirmedRound())
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
   // 予算で使っている番号に、予算にない項目として出した執行依頼の番号も足す（同じ番号を2回出さない）
   const used = await usedNumbers(null)
   const outside = await useDb().select({ itemNumber: schema.entries.itemNumber, department: schema.entries.department, inCharge: schema.entries.inCharge, details: schema.entries.details })
-    .from(schema.entries).where(like(schema.entries.itemNumber, 'out%'))
+    .from(schema.entries).where(like(schema.entries.itemNumber, flow === 'income' ? 'in%' : 'out%'))
   for (const e of outside) {
     if (used.has(e.itemNumber)) continue
     const b = bureauNameOf(e.department)
@@ -33,5 +34,5 @@ export default defineEventHandler(async (event) => {
     const kanOf = (e.details as { budgetPath?: { kan?: string } }).budgetPath?.kan ?? ''
     used.set(e.itemNumber, { itemNumber: e.itemNumber, bureau: b, team: t?.team ?? e.inCharge, kan: kanOf })
   }
-  return { itemNumber: nextItemNumber(used, team, kan) }
+  return { itemNumber: nextItemNumber(used, team, kan, flow) }
 })

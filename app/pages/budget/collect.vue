@@ -141,7 +141,8 @@ function cancelRound() {
           <template v-else>査定中です。要修正になった明細だけ、担当が直して出し直せます。すべて承認したら確定してください。</template>
         </p>
         <p v-if="summary">
-          合計 <strong>{{ formatYen(summary.total) }}</strong><template v-if="collecting.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.base) }}）</template>・
+          支出 <strong>{{ formatYen(summary.total) }}</strong><template v-if="collecting.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.base) }}）</template>・
+          収入 <strong>{{ formatYen(summary.income) }}</strong><template v-if="collecting.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.incomeBase) }}）</template>・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <div v-if="reviewer" class="buttons">
@@ -184,7 +185,8 @@ function cancelRound() {
         <template #stats>
           <span class="status-pill" :class="c.status.tone">{{ c.status.label }}</span>
           <span v-if="c.mine" class="tag">あなたの担当</span>
-          <span>合計 <strong>{{ formatYen(c.s.total) }}</strong></span>
+          <span>支出 <strong>{{ formatYen(c.s.total) }}</strong></span>
+          <span v-if="c.s.income">収入 <strong>{{ formatYen(c.s.income) }}</strong></span>
         </template>
         <InfoCard
           :to="`/budget/team/${c.team.id}`"
@@ -202,7 +204,8 @@ function cancelRound() {
             <span v-if="c.s.submitted" class="tag fill yellow">査定待ち {{ c.s.submitted }}</span>
             <span v-if="c.s.approved" class="tag fill green">承認 {{ c.s.approved }}</span>
           </template>
-          {{ formatYen(c.s.total) }}<span v-if="collecting.round.kind === '補正予算'" class="base">（もとの予算 {{ formatYen(c.s.base) }}）</span>
+          支出 {{ formatYen(c.s.total) }}<span v-if="collecting.round.kind === '補正予算'" class="base">（もとの予算 {{ formatYen(c.s.base) }}）</span>
+          <span v-if="c.s.income" class="base">・収入 {{ formatYen(c.s.income) }}</span>
         </InfoCard>
       </TeamGroup>
     </template>

@@ -22,6 +22,7 @@ const form = reactive({
   budgetPath: { kan: '', kou: '', moku: '', setsu: '' },
   itemName: '',
   budgetCommitteeApproved: false,
+  preExecutionReason: '',
   remark: '',
   amount: '',
   // 振込
@@ -128,6 +129,7 @@ function buildPayload() {
     budgetCommitteeApproved: budgetSummary.value?.change === LARGE_INCREASE && form.budgetCommitteeApproved,
     remark: form.remark,
     preExecution: !!props.pre,
+    preExecutionReason: props.pre ? form.preExecutionReason : '',
   }
   switch (methodGroup.value) {
     case '振込': return { ...common, type: '振込', amount: form.amount, deadline: form.transferDeadline, bank: form.bank }
@@ -187,6 +189,10 @@ async function onSubmit() {
         <label v-if="pre"><span>支出項目名<span class="req">*</span></span>
           <span class="hint">本予算で入る予定の項目の名前（款・項・目・節のどれか）を書いてください。本予算が確定すると、同じ担当・同じ名前の項目に付け替えます。</span>
           <input v-model="form.itemName" required>
+        </label>
+        <label v-if="pre"><span>予算前執行が必要な理由<span class="req">*</span></span>
+          <span class="hint">本予算の確定を待てない理由を書いてください。</span>
+          <textarea v-model="form.preExecutionReason" rows="3" required />
         </label>
         <div v-else class="block">
           <span class="block-label">項目番号・支出項目名<span class="req">*</span></span>

@@ -7,6 +7,7 @@
  * ほかの人は見るだけ。
  */
 import type { BudgetItemInput } from '#shared/schemas'
+import { BUDGET_FLOWS, FLOW_LABELS, type BudgetFlow } from '#shared/budgetCompile'
 
 const route = useRoute()
 const teamId = Number(route.params.id)
@@ -22,13 +23,17 @@ const editable = computed(() => open.value && !!view.value?.editableTeamIds.incl
 const canAdd = computed(() => editable.value && (reviewer.value || phase.value === 'collecting'))
 const items = computed(() => view.value?.items.filter(i => i.teamId === teamId) ?? [])
 const summary = computed(() => teamSummary(items.value))
-/** 款ごとにまとめる（並びは予算の表の順） */
+/** 収入・支出ごとに、款でまとめる（並びは予算の表の順。収入が先） */
 const kans = computed(() => {
   const groups = new Map<string, BudgetItemView[]>()
-  for (const i of items.value) groups.set(i.kan, [...(groups.get(i.kan) ?? []), i])
-  return [...groups].map(([kan, list]) => ({ kan, list, total: list.filter(i => !i.deleted).reduce((s, i) => s + i.amount, 0) }))
+  for (const i of items.value) groups.set(`${i.flow}|${i.kan}`, [...(groups.get(`${i.flow}|${i.kan}`) ?? []), i])
+  return [...groups].map(([key, list]) => ({ key, flow: list[0]!.flow, kan: list[0]!.kan, list, total: list.filter(i => !i.deleted).reduce((s, i) => s + i.amount, 0) }))
 })
-const kanNames = computed(() => kans.value.map(k => k.kan).filter(Boolean))
+const sections = computed(() => BUDGET_FLOWS
+  .map(flow => ({ flow, kans: kans.value.filter(k => k.flow === flow) }))
+  .filter(s => s.kans.length)
+  .map(s => ({ ...s, total: s.kans.reduce((sum, k) => sum + k.total, 0) })))
+const kansByFlow = computed(() => Object.fromEntries(BUDGET_FLOWS.map(f => [f, kans.value.filter(k => k.flow === f).map(k => k.kan).filter(Boolean)])) as Record<BudgetFlow, string[]>)
 /** 折りたたんだ款（見出しを押すと開け閉めできる） */
 const folded = reactive(new Set<string>())
 const toggle = (kan: string) => (folded.has(kan) ? folded.delete(kan) : folded.add(kan))
@@ -68,6 +73,7 @@ const editing = ref<string | 'new' | null>(null)
 const historyOpen = reactive(new Set<string>())
 const toggleHistory = (id: string) => (historyOpen.has(id) ? historyOpen.delete(id) : historyOpen.add(id))
 const newKan = ref('')
+const newFlow = ref<BudgetFlow>('expense')
 const pending = ref(false)
 const errors = ref<string[]>([])
 const message = ref('')
@@ -102,7 +108,8 @@ function submit() {
     run(() => $fetch(`/api/budget/teams/${teamId}/submit`, { method: 'POST' }), '提出しました。財務管理部の査定を待ってください。')
   }
 }
-function addTo(kan: string) {
+function addTo(flow: BudgetFlow, kan: string) {
+  newFlow.value = flow
   newKan.value = kan
   editing.value = 'new'
 }
@@ -119,7 +126,8 @@ function addTo(kan: string) {
 
       <div class="card head">
         <p>
-          合計 <strong>{{ formatYen(summary.total) }}</strong>（{{ view.round.kind === '本予算' ? `昨年の予算 ${formatYen(refTotal.budget)}` : `もとの予算 ${formatYen(summary.base)}` }}）・
+          支出 <strong>{{ formatYen(summary.total) }}</strong>（{{ view.round.kind === '本予算' ? `昨年の予算 ${formatYen(refTotal.budget)}` : `もとの予算 ${formatYen(summary.base)}` }}）・
+          収入 <strong>{{ formatYen(summary.income) }}</strong><template v-if="view.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.incomeBase) }}）</template>・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
@@ -135,26 +143,31 @@ function addTo(kan: string) {
         <header class="mine-head">
           <div class="mine-title">
             <h2>今年の明細（{{ view.round.term }} {{ view.round.kind }}・提出する分）</h2>
-            <span class="muted">{{ items.filter(i => !i.deleted).length }}件・合計 {{ formatYen(summary.total) }}</span>
+            <span class="muted">{{ items.filter(i => !i.deleted).length }}件・支出 {{ formatYen(summary.total) }}・収入 {{ formatYen(summary.income) }}</span>
           </div>
-          <button v-if="canAdd" class="secondary" :disabled="pending" @click="addTo('')">明細の追加</button>
+          <div v-if="canAdd" class="add-buttons">
+            <button class="secondary" :disabled="pending" @click="addTo('income', '')">収入の明細の追加</button>
+            <button class="secondary" :disabled="pending" @click="addTo('expense', '')">支出の明細の追加</button>
+          </div>
         </header>
         <BudgetItemForm
-          v-if="editing === 'new'" :initial="{ kan: newKan }" :kans="kanNames" submit-label="追加"
+          v-if="editing === 'new'" :key="`${newFlow}|${newKan}`" :initial="{ flow: newFlow, kan: newKan }" :kans="kansByFlow[newFlow]" :kans-by-flow="kansByFlow" with-flow submit-label="追加"
           :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
         />
 
-        <div v-for="k in kans" :key="k.kan" class="kan" :class="{ folded: folded.has(k.kan) }">
+        <template v-for="sec in sections" :key="sec.flow">
+        <h3 class="flow-head" :class="sec.flow">{{ FLOW_LABELS[sec.flow] }}の部 <span class="muted">{{ formatYen(sec.total) }}</span></h3>
+        <div v-for="k in sec.kans" :key="k.key" class="kan" :class="{ folded: folded.has(k.key) }">
           <div class="kan-head">
-            <button class="fold" :aria-expanded="!folded.has(k.kan)" :aria-label="folded.has(k.kan) ? '開く' : '折りたたむ'" @click="toggle(k.kan)">
+            <button class="fold" :aria-expanded="!folded.has(k.key)" :aria-label="folded.has(k.key) ? '開く' : '折りたたむ'" @click="toggle(k.key)">
               <AppIcon name="chevron-down" />
             </button>
-            <h2 @click="toggle(k.kan)">{{ k.kan || '（款なし）' }}</h2>
+            <h2 @click="toggle(k.key)">{{ k.kan || '（款なし）' }}</h2>
             <span class="muted">{{ k.list.length }}件</span>
             <span class="muted">{{ formatYen(k.total) }}</span>
-            <button v-if="canAdd" class="link" @click="addTo(k.kan)">この款に追加</button>
+            <button v-if="canAdd" class="link" @click="addTo(k.flow, k.kan)">この款に追加</button>
           </div>
-          <div v-show="!folded.has(k.kan)" class="table-wrap">
+          <div v-show="!folded.has(k.key)" class="table-wrap">
             <table class="items">
               <thead>
                 <tr><th>項目番号</th><th>項 / 目 / 節</th><th>数量</th><th>単価</th><th>金額</th><th>{{ view.round.kind === '本予算' ? '昨年から' : 'もとの予算から' }}</th><th>取引先</th><th>状態</th><th /></tr>
@@ -195,7 +208,7 @@ function addTo(kan: string) {
                   <tr v-if="editing === i.id">
                     <td colspan="9">
                       <BudgetItemForm
-                        :initial="i" :kans="kanNames" submit-label="保存" :pending="pending" :errors="errors"
+                        :initial="i" :kans="kansByFlow[i.flow]" submit-label="保存" :pending="pending" :errors="errors"
                         @submit="save" @cancel="editing = null"
                       />
                     </td>
@@ -205,7 +218,8 @@ function addTo(kan: string) {
             </table>
           </div>
         </div>
-        <p v-if="!items.length" class="hint">まだ明細がありません。「明細の追加」で入れるか、下の昨年の本予算・決算（参考）からコピーしてください。</p>
+        </template>
+        <p v-if="!items.length" class="hint">まだ明細がありません。「収入の明細の追加」「支出の明細の追加」で入れるか、下の昨年の本予算・決算（参考）からコピーしてください。</p>
       </section>
 
       <section v-if="reference" class="reference" :class="{ folded: !refOpen }">
@@ -285,6 +299,11 @@ function addTo(kan: string) {
 .mine-title h2 { font-size: 1.1rem; margin: 0; color: var(--accent-text); }
 .mine-title .muted { font-size: .82rem; }
 .mine .kan:first-of-type { margin-top: .8rem; }
+.add-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* 収入の部・支出の部の見出し */
+.flow-head { margin: 1.2rem 0 0; padding: .3rem .6rem; border-left: 4px solid var(--accent); font-size: 1rem; }
+.flow-head.income { border-left-color: var(--done); }
+.flow-head .muted { font-weight: 400; font-size: .85rem; margin-left: .4rem; }
 /* 昨年の本予算・決算（参考）：本体の明細と見分けられるよう、点線の枠で囲む */
 .reference { margin: 1rem 0 1.6rem; border: 1.5px dashed var(--border); border-radius: 12px; background: var(--panel); }
 .ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; cursor: pointer; user-select: none; }

@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   assertCanAddItem(user, round)
   const body = parseOr400(budgetItemSchema.safeParse(await readBody(event)))
   const [{ latest }, used] = await Promise.all([roundState(round), usedNumbers(round)])
-  const itemNumber = nextItemNumber(used, team, body.kan)
+  const itemNumber = nextItemNumber(used, team, body.kan, body.flow)
   return writeItem(round, null, {
     ...(body as ItemValues), itemNumber, bureau: team.bureau, team: team.team, sortOrder: sortOrderFor([...latest.values()], team, body.kan),
   }, user, 'draft')

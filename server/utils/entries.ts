@@ -1,4 +1,5 @@
 import { formatItemNumbers } from '../../shared/itemNumbers'
+import { flowOf } from '../../shared/budgetCompile'
 import { asc, inArray, sql } from 'drizzle-orm'
 import type { BudgetLine, Entry, EntryItem } from '../db/schema'
 
@@ -13,6 +14,7 @@ export async function resolveBudgetLines(keys: string[], manualItemNumber: strin
   if (found.length !== unique.length) {
     throw createError({ statusCode: 400, message: '選んだ予算明細が見つかりません。予算が取り込み直された可能性があるので、ページを再読み込みして選び直してください。' })
   }
+  if (found.some(l => flowOf(l.itemNumber) === 'income')) throw createError({ statusCode: 400, message: '収入の明細は執行依頼では選べません。' })
   const lines = found.sort((a, b) => a.sortOrder - b.sortOrder)
   return { itemNumber: formatItemNumbers(lines.map(l => l.itemNumber)), lines }
 }
@@ -87,13 +89,13 @@ export async function withItems<T extends Entry>(rows: T[]): Promise<(T & { item
 }
 
 /** 通し番号を原子的に払い出す（旧GASの ScriptProperties カウンタの置き換え） */
-export async function nextSeq(kind: 'execution' | 'evidence') {
+export async function nextSeq(kind: 'execution' | 'evidence' | 'income') {
   const [row] = await useDb()
     .insert(schema.counters)
     .values({ name: kind, value: 1 })
     .onConflictDoUpdate({ target: schema.counters.name, set: { value: sql`${schema.counters.value} + 1` } })
     .returning({ value: schema.counters.value })
-  const prefix = kind === 'execution' ? 'E' : 'R'
+  const prefix = kind === 'execution' ? 'E' : kind === 'income' ? 'I' : 'R'
   return `${prefix}-${String(row!.value).padStart(3, '0')}`
 }
 

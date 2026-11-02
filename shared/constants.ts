@@ -77,6 +77,9 @@ export const DELIVERY_PLACES = ['駒場（A103）', '本郷（6号）'] as const
 export const PAPER_RECEIPT = ['有り', '無し'] as const
 /** 台帳から付ける証憑の種類と、立替の返金時期 */
 export const EVIDENCE_KINDS = ['領収書', '見積書', 'その他'] as const
+/** 収入の受け取り方と、収入の証憑の種類 */
+export const INCOME_METHODS = ['振込', '現金', 'その他'] as const
+export const INCOME_FILE_KINDS = ['入金の明細', '領収書の控え', '契約書・請求書', 'その他'] as const
 export const REFUND_TIMINGS = ['委員返金と同時', 'できる限り早く'] as const
 
 export const TRANSFER_BANKS = ['SMBC', 'ゆうちょ'] as const
