@@ -59,6 +59,20 @@ export function budgetChangeOf(actual: number, budget: number): BudgetChange {
 export const LARGE_INCREASE: BudgetChange = '大幅な増額（1万円以上）'
 
 /**
+ * 執行額を入力した明細のうち、予算額と違うもの（予算の変更を申請するかを聞く対象）。
+ * 申請フォームの表示とサーバーの両方で使う。
+ */
+export function changedItems<L extends { key: string, budgetAmount: number }>(
+  lines: L[],
+  amounts: Record<string, number | '' | undefined>,
+) {
+  return lines.flatMap((l) => {
+    const actual = amounts[l.key]
+    return typeof actual === 'number' && actual !== l.budgetAmount ? [{ line: l, actual }] : []
+  })
+}
+
+/**
  * 選んだ予算明細の予算額の合計と、明細ごとの執行額（未入力なら予算額）の合計から「予算からの変更」を決める。
  * 申請フォームの表示とサーバーでの保存の両方で使う。
  */

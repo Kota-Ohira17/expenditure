@@ -69,6 +69,12 @@ const base = z.object({
   itemName: required('支出項目名'),
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
   budgetCommitteeApproved: z.boolean().default(false),
+  /**
+   * 明細の金額が予算額と違うとき、予算の変更（②）も申請するか（任意。初めはしない）。
+   * 申請するときの理由（書かなければ、執行依頼の番号と金額から作る）
+   */
+  requestBudgetChange: z.boolean().default(false),
+  budgetChangeReason: z.string().trim().max(1000).default(''),
   /** 予算前執行（本予算が確定する前の執行。予算の表から選ばない） */
   preExecution: z.boolean().default(false),
   /** 予算前執行が必要な理由（予算前執行のときは必須） */
@@ -95,6 +101,8 @@ export const executionRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('発注'),
     site: required('通販サイト'),
     url: required('商品ページのリンク'), // 複数のリンクを改行で書いてよい
+    /** 商品の金額（税込・送料を除く）。送料無料の基準に届くかの判断に使う */
+    amount: yen,
     quantity: z.string().trim().default(''), // 予算にない項目のときは必須（checkItems）
     deadline: date,
     deliveryPlace: required('配達場所'),

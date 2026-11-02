@@ -1,5 +1,5 @@
 import { can } from '../../../shared/roles'
-import { budgetChangeOfItems, LARGE_INCREASE } from '../../../shared/constants'
+import { budgetChangeOfItems, changedItems, LARGE_INCREASE } from '../../../shared/constants'
 import { executionRequestSchema } from '../../../shared/schemas'
 
 /** 執行依頼（旧「執行依頼」フォーム）。予算前執行も同じフォームで出す（予算の表から選ばず、支出項目名を書く） */
@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
   const {
     type, applicantName, department, inCharge, budgetLineKeys, itemNumber: manualItemNumber, itemName, remark, deadline,
     itemAmounts, itemQuantities, itemVendors: _itemVendors, budgetCommitteeApproved, preExecution, preExecutionReason, budgetPath,
+    requestBudgetChange, budgetChangeReason,
     ...rest
   } = input
   const { amount, quantity, ...details } = rest as typeof rest & { amount?: number, quantity?: string }
@@ -27,6 +28,9 @@ export default defineEventHandler(async (event) => {
   if (budgetChange === LARGE_INCREASE && !budgetCommitteeApproved) {
     throw createError({ statusCode: 400, message: '1万円以上の増額は、役員会の承認を得てから申請してください（承認のチェックが必要です）。' })
   }
+
+  // 金額が予算額と違う明細（「予算の変更も申請する」にチェックがあれば、あとで申請する）
+  const changed = changedItems(lines, itemAmounts)
 
   const attachmentId = file
     ? await saveAttachment(file, `${inCharge}_${itemName}_請求書`)
@@ -58,8 +62,12 @@ export default defineEventHandler(async (event) => {
     attachmentId,
   }, lines, input)
   if (preExecution) await recordPreExecution(entry, user)
+  // 執行依頼は受け付けたので、予算の変更の申請で失敗しても依頼は取り消さない（申請できなかった明細を返す）
+  const budgetChangeRequests = changed.length && requestBudgetChange
+    ? await requestChangesFromEntry(entry, changed, user, budgetChangeReason)
+    : null
 
   await notifyN8n('created', entry)
   setResponseStatus(event, 201)
-  return toPublicEntry(entry, can(user.role, 'viewBankAccount'))
+  return { ...toPublicEntry(entry, can(user.role, 'viewBankAccount')), budgetChangeRequests }
 })

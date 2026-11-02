@@ -1,7 +1,7 @@
 import { and, eq, or } from 'drizzle-orm'
 import { BUDGET_TERM } from '../../shared/constants'
 import type { BudgetItemInput } from '../../shared/schemas'
-import type { BudgetChangeRequest, BudgetTeam } from '../db/schema'
+import type { BudgetChangeRequest, BudgetLine, BudgetTeam } from '../db/schema'
 import type { SessionUser } from './auth'
 
 /**
@@ -104,4 +104,56 @@ export async function pendingItemNumbers() {
   const rows = await useDb().select({ itemNumber: schema.budgetChangeRequests.itemNumber }).from(schema.budgetChangeRequests)
     .where(and(eq(schema.budgetChangeRequests.status, 'pending'), or(eq(schema.budgetChangeRequests.kind, 'edit'), eq(schema.budgetChangeRequests.kind, 'delete'))))
   return rows.map(r => r.itemNumber).filter(Boolean)
+}
+
+/**
+ * 執行依頼で明細の金額が予算額と違ったときに、その金額へ直す予算の変更を②に申請する（承認待ち。財務管理部でもすぐには反映しない）。
+ * 執行依頼そのものは失敗させないので、申請できなかった明細は理由をつけて返す。
+ * だれが出した執行依頼でも申請できる（承認するのは財務管理部なので、担当の割り当ては問わない）。
+ */
+export async function requestChangesFromEntry(
+  entry: { seq: string },
+  changed: { line: BudgetLine, actual: number }[],
+  user: SessionUser,
+  reason: string,
+) {
+  const created: string[] = []
+  const skipped: { itemNumber: string, reason: string }[] = []
+  const { rows } = await currentBudget()
+  for (const { line, actual } of changed) {
+    const row = rows.find(r => r.itemNumber === line.itemNumber)
+    if (!row) {
+      skipped.push({ itemNumber: line.itemNumber, reason: '今の予算に項目が見つかりませんでした。' })
+      continue
+    }
+    try {
+      await assertNoPending(row.itemNumber)
+    }
+    catch {
+      skipped.push({ itemNumber: row.itemNumber, reason: 'この項目にはもう承認待ちの変更があります。' })
+      continue
+    }
+    const before = itemValues(row)
+    // 金額だけを執行額にする。単価があって合わなくなるなら単価は空にする
+    const qty = Number(row.quantity)
+    const unitPrice = row.unitPrice != null && Number.isFinite(qty) && qty * row.unitPrice === actual ? row.unitPrice : null
+    const auto = `執行依頼 ${entry.seq} で、執行額が予算額と違うため（予算額 ¥${row.amount.toLocaleString('ja-JP')} → 執行額 ¥${actual.toLocaleString('ja-JP')}）。`
+    await useDb().insert(schema.budgetChangeRequests).values({
+      id: newId(),
+      term: BUDGET_TERM,
+      kind: 'edit',
+      bureau: row.bureau,
+      team: row.team,
+      itemNumber: row.itemNumber,
+      after: { ...before, amount: actual, unitPrice },
+      before,
+      reason: reason ? `${reason}\n${auto}` : auto,
+      sortOrder: row.sortOrder,
+      direct: false,
+      createdAt: new Date(),
+      createdBy: user.email,
+    })
+    created.push(row.itemNumber)
+  }
+  return { created, skipped }
 }
