@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
  * このあと「査定開始」で査定できるようになる。
  */
 export default defineEventHandler(async (event) => {
-  const user = await requirePermission(event, 'reviewBudget')
+  const user = await requireArrangeBudget(event)
   const round = await openRoundOr404(Number(getRouterParam(event, 'id')))
   assertPhase(round, 'collecting')
   const numbers = await numbersWhere(round, s => s === 'draft' || s === 'returned')

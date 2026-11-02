@@ -6,7 +6,7 @@ import { budgetBureauSchema } from '../../../../shared/schemas'
  * 局の番号を変えると、これから足す明細の項目番号がその番号から始まる（今ある明細の番号は変えない）。
  */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const db = useDb()
   const bureau = await db.query.budgetBureaus.findFirst({ where: eq(schema.budgetBureaus.id, Number(getRouterParam(event, 'id'))) })
   if (!bureau) throw createError({ statusCode: 404, message: '局が見つかりません。' })

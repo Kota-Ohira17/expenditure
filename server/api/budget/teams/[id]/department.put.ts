@@ -3,7 +3,7 @@ import { budgetTeamMoveSchema } from '../../../../../shared/schemas'
 
 /** 担当を部に入れる（departmentId）・部から出して局の直属にする（null）。財務管理部。同じ局の部だけ */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const { team } = await openTeamOr404(Number(getRouterParam(event, 'id')))
   const { departmentId } = parseOr400(budgetTeamMoveSchema.safeParse(await readBody(event)))
   const db = useDb()

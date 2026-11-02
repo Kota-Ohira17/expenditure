@@ -3,7 +3,7 @@ import { budgetTeamCreateSchema } from '../../../../shared/schemas'
 
 /** 集約中の予算の局の中（部に入れるなら部の中）に担当を足す（財務管理部）。いちばん後ろに並ぶ */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const body = parseOr400(budgetTeamCreateSchema.safeParse(await readBody(event)))
   const round = await openRound()
   if (!round) throw createError({ statusCode: 409, message: '確定していない集約がありません。' })

@@ -3,7 +3,7 @@ import { budgetDepartmentSchema } from '../../../../shared/schemas'
 
 /** 部の英語名・日本語名を直す（財務管理部） */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const db = useDb()
   const dept = await db.query.budgetDepartments.findFirst({ where: eq(schema.budgetDepartments.id, Number(getRouterParam(event, 'id'))) })
   if (!dept) throw createError({ statusCode: 404, message: '部が見つかりません。' })

@@ -3,7 +3,7 @@ import { budgetDepartmentSchema } from '../../../../shared/schemas'
 
 /** 局の中に部を足す（財務管理部）。その局のいちばん後ろに並ぶ */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const raw = await readBody(event)
   const body = parseOr400(budgetDepartmentSchema.safeParse(raw))
   const db = useDb()

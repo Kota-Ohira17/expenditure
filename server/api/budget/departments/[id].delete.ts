@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 
 /** 部を消す（財務管理部）。中の担当は消さず、局の直属に戻す */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const db = useDb()
   const dept = await db.query.budgetDepartments.findFirst({ where: eq(schema.budgetDepartments.id, Number(getRouterParam(event, 'id'))) })
   if (!dept) throw createError({ statusCode: 404, message: '部が見つかりません。' })

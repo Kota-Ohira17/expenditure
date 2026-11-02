@@ -9,6 +9,9 @@ import { BUDGET_TERM } from '#shared/constants'
 
 const { can } = usePermissions()
 const reviewer = computed(() => can('reviewBudget'))
+/** 集約の段取り（開始・すべて提出・終了・査定開始・確定・中止、局・部・担当と入力する人）ができるか（管理者と財務局長補佐（ZAI の zas）） */
+const { data: access } = await useFetch('/api/budget/access', { default: () => ({ canArrange: false }) })
+const arranger = computed(() => access.value.canArrange)
 const { data: view, refresh } = await useBudgetRound()
 
 const collecting = computed(() => view.value && view.value.round.status !== 'confirmed' ? view.value : null)
@@ -146,19 +149,27 @@ function cancelRound() {
           収支 <strong :class="{ minus: summary.income - summary.total < 0 }">{{ formatYen(summary.income - summary.total) }}</strong>・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
-        <div v-if="reviewer" class="buttons">
+        <div v-if="reviewer || arranger" class="buttons">
           <template v-if="phase === 'collecting'">
-            <button :disabled="pending || !notSubmitted" @click="submitAll">すべて提出（{{ notSubmitted }}件）</button>
-            <button :disabled="pending" @click="closeRound">集約終了</button>
+            <template v-if="arranger">
+              <button :disabled="pending || !notSubmitted" @click="submitAll">すべて提出（{{ notSubmitted }}件）</button>
+              <button :disabled="pending" @click="closeRound">集約終了</button>
+            </template>
           </template>
-          <button v-else-if="phase === 'closed'" :disabled="pending" @click="startReview">査定開始</button>
+          <template v-else-if="phase === 'closed'">
+            <button v-if="arranger" :disabled="pending" @click="startReview">査定開始</button>
+          </template>
           <template v-else>
-            <NuxtLink class="button" to="/budget/review">査定（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
-            <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
-            <button :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
+            <template v-if="reviewer">
+              <NuxtLink class="button" to="/budget/review">査定（{{ summary?.submitted ?? 0 }}件）</NuxtLink>
+              <button :disabled="pending || !notApproved" @click="approveAll">すべて承認（{{ notApproved }}件）</button>
+            </template>
+            <button v-if="arranger" :disabled="pending || notApproved > 0" :title="notApproved ? 'すべての明細を承認すると確定できます。' : ''" @click="confirmRound">確定</button>
           </template>
-          <NuxtLink class="button secondary" to="/budget/setup">局・部・担当と入力する人</NuxtLink>
-          <button class="secondary" :disabled="pending" @click="cancelRound">集約の中止</button>
+          <template v-if="arranger">
+            <NuxtLink class="button secondary" to="/budget/setup">局・部・担当と入力する人</NuxtLink>
+            <button class="secondary" :disabled="pending" @click="cancelRound">集約の中止</button>
+          </template>
         </div>
       </div>
 
@@ -172,7 +183,7 @@ function cancelRound() {
         </ul>
       </div>
       <p v-else-if="!reviewer" class="hint">明細の入力・提出はだれでもできます。下の「担当ごとの進み具合」から、入力する担当を開いてください。</p>
-      <ReferenceImport v-if="reviewer && collecting.round.kind === '本予算'" />
+      <ReferenceImport v-if="collecting.round.kind === '本予算'" />
 
       <h2>担当ごとの進み具合</h2>
       <BureauTabs v-model="bureau" :tabs="bureauTabs" />
@@ -217,7 +228,7 @@ function cancelRound() {
         <p v-if="!view" class="hint">
           まだ予算がありません。{{ reviewer ? '「予算」の画面で、もとにする予算（昨年の予算など）を取り込んでから始めてください。' : '財務管理部が予算を用意するまでお待ちください。' }}
         </p>
-        <template v-else-if="reviewer">
+        <template v-else-if="arranger">
           <p class="hint">
             確定した予算（{{ view.round.term }} {{ view.round.kind }}）の局・担当を写して始めます。
             本予算は明細を空から作り、取り込んだ昨年の本予算・決算を参考にコピーできます（下の「昨年の本予算・決算の取り込み」）。補正予算は明細も写し、変えるものだけ直します。
@@ -233,9 +244,9 @@ function cancelRound() {
             <button type="submit" :disabled="pending || !start.kind">集約開始</button>
           </form>
         </template>
-        <p v-else class="hint">財務管理部が集約を始めると、ここから自分の担当の明細を入力できます。</p>
+        <p v-else class="hint">管理者か財務局長補佐（ZAI の zas）が集約を始めると、ここから自分の担当の明細を入力できます。</p>
       </div>
-      <ReferenceImport v-if="reviewer && view" />
+      <ReferenceImport v-if="view" />
     </template>
   </section>
 </template>
