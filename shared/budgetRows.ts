@@ -82,10 +82,12 @@ function headerCells(l: SheetLine, level: Level): SheetRow<SheetLine>['cells'] {
 }
 
 const NAME_LEVELS = ['kou', 'moku', 'setsu'] as const
+/** 明細が1件だけなら見出しの行を出さずに明細の行へ名前を並べる階層 */
+const INLINE_LEVELS: readonly Level[] = ['moku', 'setsu']
 
 /**
  * 明細の行そのもの。番号はその明細の項目番号。
- * 名前は、見出しの行を出さなかった階層（その明細だけの項・目）から、その明細の階層までを同じ行に出す。
+ * 名前は、見出しの行を出さなかった階層（その明細だけの目・節）から、その明細の階層までを同じ行に出す。
  */
 function lineCells(l: SheetLine, inline: Set<Level>): SheetRow<SheetLine>['cells'] {
   const number = l.itemNumber || (l.level === 'kan' ? l.kanNo : l.kouNo)
@@ -110,7 +112,7 @@ export function buildSheetRows<L extends SheetLine>(lines: readonly L[]) {
     LEVELS.forEach((level, i) => { prefixes[i] = `${prefixes[i - 1] ?? ''}/${value(l, level)}` })
     return prefixes
   }
-  // 項・目・節の見出しは、その下に明細が2件以上あるときだけ出す（1件だけなら明細の行に名前を並べる）
+  // 目・節の見出しは、その下に明細が2件以上あるときだけ出す（1件だけなら明細の行に名前を並べる）。項の見出しはいつも出す
   const count = new Map<string, number>()
   for (const l of lines) {
     const own = l.level === 'none' ? LEVELS.length : LEVELS.indexOf(l.level)
@@ -126,7 +128,8 @@ export function buildSheetRows<L extends SheetLine>(lines: readonly L[]) {
     LEVELS.forEach((level, i) => {
       if (i >= own || !value(l, level)) return
       if (GROUP_LEVELS.includes(level)) descendants.set(prefixes[i]!, [...(descendants.get(prefixes[i]!) ?? []), l.key])
-      if ((NAME_LEVELS as readonly Level[]).includes(level) && (count.get(prefixes[i]!) ?? 0) < 2) {
+      // 項はその下の目・節と同じ行にしない（項の行には項だけを出す）
+      if (INLINE_LEVELS.includes(level) && (count.get(prefixes[i]!) ?? 0) < 2) {
         inline.add(level)
         return
       }
