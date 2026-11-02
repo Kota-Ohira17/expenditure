@@ -69,7 +69,7 @@ export async function applyChange(change: BudgetChangeRequest, user: SessionUser
   if (change.kind === 'add') {
     const used = await usedNumbers(revising)
     const bureauNo = team.bureauNo || rows.find(r => r.bureau === team.bureau)?.itemNumber.match(/^[a-z]+-?\d+/i)?.[0] || ''
-    itemNumber = nextItemNumber(used, { bureauNo, bureau: team.bureau, team: team.team }, after!.kan as string)
+    itemNumber = nextItemNumber(used, { bureauNo, bureau: team.bureau, team: team.team }, after!.kan as string, after!.flow === 'income' ? 'income' : 'expense')
     values = {
       id: newId(), term: BUDGET_TERM, roundId: null, itemNumber, bureau: team.bureau, team: team.team,
       ...itemValues(after as unknown as ItemValues), deleted: false, status: 'approved',

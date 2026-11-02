@@ -26,7 +26,7 @@ const query = ref('')
 const bureau = ref('')
 const teamId = ref<number | ''>('')
 const change = ref<'' | 'plus' | 'minus' | 'new' | 'deleted'>('')
-const flag = ref<'' | 'isNew' | 'preExecution' | 'comment'>('')
+const flag = ref<'' | 'isNew' | 'preExecution' | 'comment' | 'income' | 'expense'>('')
 const teamById = computed(() => new Map((view.value?.teams ?? []).map(t => [t.id, t])))
 /** 出す担当（昨年の本予算・決算に明細がある担当と、この集約に項目がある担当） */
 const listedTeams = computed(() => (view.value?.teams ?? []).filter(t => t.listed))
@@ -42,6 +42,7 @@ function matches(i: BudgetItemView, withBureau = true) {
   if (change.value === 'deleted' && !i.deleted) return false
   if ((change.value === 'plus' || change.value === 'minus') && (i.baseAmount == null || i.deleted || changeOf(i).kind !== change.value)) return false
   if (flag.value === 'comment' && !i.reviewComment) return false
+  if ((flag.value === 'income' || flag.value === 'expense') && i.flow !== flag.value) return false
   if ((flag.value === 'isNew' || flag.value === 'preExecution') && !i[flag.value]) return false
   const words = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const text = [i.number, i.kan, itemName(i), i.vendor, i.spec, i.remark, t?.bureau, t?.team].join(' ').toLowerCase()
@@ -60,7 +61,12 @@ const shown = computed(() => narrowed.value.filter(i => inFilter(i, filter.value
 const groups = computed(() => (view.value?.teams ?? [])
   .map(t => ({ team: t, list: shown.value.filter(i => i.teamId === t.id) }))
   .filter(g => g.list.length)
-  .map(g => ({ ...g, total: g.list.filter(i => !i.deleted).reduce((s, i) => s + i.amount, 0), visible: g.list.slice(0, limitOf(g.team.id)) })))
+  .map(g => ({
+    ...g,
+    total: g.list.filter(i => !i.deleted && i.flow !== 'income').reduce((s, i) => s + i.amount, 0),
+    income: g.list.filter(i => !i.deleted && i.flow === 'income').reduce((s, i) => s + i.amount, 0),
+    visible: g.list.slice(0, limitOf(g.team.id)),
+  })))
 
 /** 担当ごとに、カードは20件ずつ出す（「もっと見る」で20件ずつ増やす）。検索や絞り込みを変えたら20件に戻す */
 const PAGE = 20
@@ -153,7 +159,7 @@ async function approveAll(ids: string[]) {
             <option value="">変更の種類</option><option value="plus">増額</option><option value="minus">減額</option><option value="new">新規の明細</option><option value="deleted">削除</option>
           </select>
           <select v-model="flag" aria-label="その他">
-            <option value="">その他</option><option value="isNew">新規の印あり</option><option value="preExecution">予算前執行</option><option value="comment">コメントあり</option>
+            <option value="">その他</option><option value="isNew">新規の印あり</option><option value="preExecution">予算前執行</option><option value="comment">コメントあり</option><option value="income">収入の明細</option><option value="expense">支出の明細</option>
           </select>
         </div>
       </div>
@@ -169,7 +175,8 @@ async function approveAll(ids: string[]) {
       >
         <template #stats>
           <span><strong>{{ g.list.length }}</strong>件</span>
-          <span>合計 <strong>{{ formatYen(g.total) }}</strong></span>
+          <span>支出 <strong>{{ formatYen(g.total) }}</strong></span>
+          <span v-if="g.income">収入 <strong>{{ formatYen(g.income) }}</strong></span>
         </template>
         <template v-if="filter === 'submitted'" #actions>
           <button class="secondary" :disabled="busy !== null" @click="approveAll(g.list.map(i => i.id))">
@@ -185,6 +192,7 @@ async function approveAll(ids: string[]) {
             :when="i.updatedAt" :note="i.reviewComment"
           >
             <template #tags>
+              <span v-if="i.flow === 'income'" class="tag fill green">収入</span>
               <span class="tag">{{ changeOf(i).label }}</span>
               <span v-if="i.isNew && i.baseAmount != null" class="tag fill pink">新規</span>
               <span v-if="i.preExecution" class="tag fill yellow">予算前執行</span>

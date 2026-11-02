@@ -1,5 +1,6 @@
 import { asc, eq, inArray } from 'drizzle-orm'
-import type { BudgetLine, Entry, EntryItem } from '../db/schema'
+import { flowOf } from '../../shared/budgetCompile'
+import type { BudgetLine, Entry, EntryItem, IncomeRecord } from '../db/schema'
 import type { EvidenceView } from './evidence'
 
 /**
@@ -8,6 +9,7 @@ import type { EvidenceView } from './evidence'
  * - 「支出詳細」: 執行した明細を 局 → 担当 → 款 の見出しの下に並べ、数量・単価・金額・仕様等・取引先と、款ごとの項目合計・局合計
  * - 「証憑（支出）」: 同じ並びで、金額・執行年月日・執行方法・領収書・その他証憑（ファイル名のリンク）
  * - 「執行一覧」: 対応済みの申請を明細ごとに1行ずつ（証憑へのリンクつき）
+ * - 「収入詳細」: 確認済みの収入を、収入の予算明細（項目番号が in から始まる）ごとに足し、支出詳細と同じ並び・見出しで出す
  */
 
 type Link = { text: string, url: string }
@@ -90,8 +92,14 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
     ? (await db.select({ id: schema.attachments.id, fileName: schema.attachments.fileName }).from(schema.attachments).where(inArray(schema.attachments.id, attachmentIds))).map(a => [a.id, a.fileName])
     : [])
   const done: DoneEntry[] = rows.map(r => ({ ...r, attachmentName: r.attachmentId ? names.get(r.attachmentId) ?? null : null }))
-  const settled = settledLines(lines, done, sheetExtras(sheetRows))
-  return [detailTable(settled), evidenceTable(settled, origin), executionTable(done, origin)]
+  // 支出の決算は支出の明細だけで作る（収入の明細は収入詳細に出す）
+  const expenseLines = lines.filter(l => flowOf(l.itemNumber) === 'expense')
+  const settled = settledLines(expenseLines, done, sheetExtras(sheetRows))
+  const incomes = await db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')).orderBy(asc(schema.incomeRecords.receivedOn))
+  return [
+    detailTable(settled), evidenceTable(settled, origin), executionTable(done, origin),
+    incomeTable(incomeLines(lines.filter(l => flowOf(l.itemNumber) === 'income'), incomes)),
+  ]
 }
 
 /**
@@ -260,6 +268,59 @@ function detailTable(settled: SettledLine[]): Table {
     },
   }, { bureau: 1, team: 2, kan: [4, 15], end: 16 })
   return { name: '支出詳細', columns, rows, title: ['決算案', '支出'], sheetStyle: true }
+}
+
+/**
+ * 収入の決算に載せる明細（予算の並び順）。確認済みの収入を予算明細ごとに足す。
+ * 予算にない収入（予算明細を選ばずに記録したもの・予算から消えた明細）は「予算にない収入」の局にまとめ、書いた款〜節と担当を出す。
+ */
+function incomeLines(lines: BudgetLine[], incomes: IncomeRecord[]): SettledLine[] {
+  const byKey = new Map(lines.map(l => [l.key, l]))
+  const used = new Map<string, IncomeRecord[]>()
+  const outside: SettledLine[] = []
+  const line = (base: Pick<SettledLine, 'itemNumber' | 'bureau' | 'team' | 'kan' | 'kou' | 'moku' | 'setsu'>, list: IncomeRecord[]): SettledLine => ({
+    ...base,
+    person: '',
+    quantity: '',
+    amount: list.reduce((sum, i) => sum + i.amount, 0),
+    spec: '',
+    vendor: [...new Set(list.map(i => i.payer).filter(Boolean))].join('・'),
+    note: `${list.length}件（${list.map(i => i.seq).join('・')}）`,
+    entries: [],
+  })
+  for (const i of incomes) {
+    if (i.lineKey && byKey.has(i.lineKey)) used.set(i.lineKey, [...(used.get(i.lineKey) ?? []), i])
+    else {
+      const path = (i.details as { budgetPath?: { kan?: string, kou?: string, moku?: string, setsu?: string } }).budgetPath
+      outside.push(line({ itemNumber: i.itemNumber, bureau: '予算にない収入', team: i.inCharge, kan: path?.kan ?? '', kou: path?.kou || i.itemName, moku: path?.moku ?? '', setsu: path?.setsu ?? '' }, [i]))
+    }
+  }
+  const result = lines.filter(l => used.has(l.key)).map(l => line(l, used.get(l.key)!))
+  return [...result, ...outside]
+}
+
+function incomeTable(settled: SettledLine[]): Table {
+  const columns: TableColumn[] = [
+    { key: 'number', header: '項目番号', width: px(100) },
+    { key: 'bureau', header: '局', width: px(80) },
+    { key: 'team', header: '担当', width: px(80) },
+    { key: 'kan', header: '款', width: px(150) },
+    { key: 'kou', header: '項', width: px(150) },
+    { key: 'moku', header: '目', width: px(150) },
+    { key: 'setsu', header: '節', width: px(150) },
+    { key: 'amount', header: '金額', width: px(120), format: 'currency' },
+    { key: 'vendor', header: '相手先', width: px(150) },
+    { key: 'note', header: '備考', width: px(170) },
+    { key: 'kanTotal', header: '項目合計', width: px(120), format: 'currency' },
+    { key: 'bureauTotal', header: '局合計', width: px(120), format: 'currency' },
+  ]
+  const rows = groupedRows(settled, {
+    bureau: (l, total) => ({ bureau: l.bureau, bureauTotal: total }),
+    team: l => ({ team: l.team }),
+    kan: (l, total) => ({ kan: l.kan, kanTotal: total }),
+    line: (l, names) => ({ number: l.itemNumber, ...names, amount: l.amount, vendor: l.vendor, note: l.note }),
+  }, { bureau: 1, team: 2, kan: [3, 11], end: 12 })
+  return { name: '収入詳細', columns, rows, title: ['決算案', '収入'], sheetStyle: true }
 }
 
 /** 執行方法の書き方を決算シートに合わせる */

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BUDGET_FLOWS, flowOf, type BudgetFlow } from '#shared/budgetCompile'
 /**
  * 予算の変更。集約とは別に、確定した予算の明細を直す・足す・消す。
  * 担当の人は自分の担当の明細について申請し、財務管理部が承認すると予算に反映される（却下には理由を書く）。
@@ -73,6 +74,8 @@ const form = reactive({ teamId: '' as number | '', kind: 'edit' as 'edit' | 'add
 const myTeams = computed(() => (data.value?.teams ?? []).filter(t => data.value!.editableTeamIds.includes(t.id)))
 const teamItems = computed(() => (data.value?.items ?? []).filter(i => i.teamId === form.teamId))
 const teamKans = computed(() => [...new Set(teamItems.value.map(i => i.kan).filter(Boolean))])
+/** 収入・支出ごとの款（追加のときに選んだ側の款を出す。収入の項目番号は in から始まる） */
+const teamKansByFlow = computed(() => Object.fromEntries(BUDGET_FLOWS.map(f => [f, [...new Set(teamItems.value.filter(i => flowOf(i.number) === f).map(i => i.kan).filter(Boolean))]])) as Record<BudgetFlow, string[]>)
 const picked = computed(() => teamItems.value.find(i => i.number === form.itemNumber))
 const pendingOn = (i: Item) => data.value?.pendingItemNumbers.includes(i.number)
 watch(() => form.teamId, () => { form.itemNumber = '' })
@@ -186,7 +189,7 @@ function withdraw(c: Change) {
 
       <template v-if="form.teamId !== ''">
         <BudgetItemForm
-          v-if="form.kind === 'add'" :key="`add-${form.teamId}`" :kans="teamKans"
+          v-if="form.kind === 'add'" :key="`add-${form.teamId}`" :kans="teamKans" :kans-by-flow="teamKansByFlow" with-flow
           :submit-label="reviewer ? '追加' : '追加を申請'" :pending="pending" @submit="send" @cancel="creating = false"
         />
         <BudgetItemForm

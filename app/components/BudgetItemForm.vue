@@ -4,12 +4,16 @@
  * 数量が数で単価が入っていれば、金額は「数量 × 単価」を初めに入れる（直してもよい）。
  */
 import type { BudgetItemInput } from '#shared/schemas'
+import { BUDGET_FLOWS, FLOW_LABELS, type BudgetFlow } from '#shared/budgetCompile'
 
 const props = defineProps<{
   /** 直すときの今の値（足すときは空） */
   initial?: Partial<BudgetItemInput>
   /** この担当の款の名前（選択肢） */
   kans: string[]
+  /** 足すときに収入・支出を選ばせるか（選んだ側の款を kansByFlow から出す。直すときは選べない） */
+  withFlow?: boolean
+  kansByFlow?: Record<BudgetFlow, string[]>
   submitLabel: string
   pending?: boolean
   errors?: string[]
@@ -18,6 +22,7 @@ const emit = defineEmits<{ submit: [value: BudgetItemInput], cancel: [] }>()
 
 const text = (v: unknown) => (v == null ? '' : String(v))
 const form = reactive({
+  flow: (props.initial?.flow ?? 'expense') as BudgetFlow,
   kan: text(props.initial?.kan),
   kou: text(props.initial?.kou),
   moku: text(props.initial?.moku),
@@ -50,10 +55,14 @@ function onSubmit() {
 
 <template>
   <form class="item-form" @submit.prevent="onSubmit">
+    <div v-if="withFlow" class="checks" role="radiogroup" aria-label="収入・支出">
+      <label v-for="f in BUDGET_FLOWS" :key="f" class="check"><input v-model="form.flow" type="radio" :value="f"> {{ FLOW_LABELS[f] }}</label>
+      <span class="hint">収入の項目番号は in、支出は out から始まります。</span>
+    </div>
     <div class="names">
       <label><span>款<span class="req">*</span></span>
         <input v-model.trim="form.kan" :list="listId" required>
-        <datalist :id="listId"><option v-for="k in kans" :key="k" :value="k" /></datalist>
+        <datalist :id="listId"><option v-for="k in (withFlow && kansByFlow ? kansByFlow[form.flow] : kans)" :key="k" :value="k" /></datalist>
       </label>
       <label>項<input v-model.trim="form.kou"></label>
       <label>目<input v-model.trim="form.moku"></label>

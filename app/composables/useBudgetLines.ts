@@ -1,8 +1,14 @@
 import { bureauCodeOf } from '#shared/constants'
+import { flowOf } from '#shared/budgetCompile'
 
-/** 予算明細（全件）。フォームと選択部品で同じデータを共有する */
+/** 支出の予算明細（執行依頼で選ぶもの）。フォームと選択部品で同じデータを共有する */
 export function useBudgetLines() {
-  return useFetch('/api/budget-lines', { key: 'budget-lines', default: () => [] })
+  return useFetch('/api/budget-lines', { key: 'budget-lines', default: () => [], transform: rows => rows.filter(l => flowOf(l.itemNumber) === 'expense') })
+}
+
+/** 収入の予算明細（収入の記録で選ぶもの。項目番号が in から始まる） */
+export function useIncomeLines() {
+  return useFetch('/api/budget-lines', { key: 'income-lines', default: () => [], transform: rows => rows.filter(l => flowOf(l.itemNumber) === 'income') })
 }
 
 /** 取り込んである予算が本予算か補正予算か（まだ取り込んでいなければ「予算」）。フォームの文言に使う */

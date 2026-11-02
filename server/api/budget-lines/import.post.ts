@@ -1,4 +1,5 @@
 import { BUDGET_TERM } from '../../../shared/constants'
+import { flowOf } from '../../../shared/budgetCompile'
 import type { BudgetKind } from '../../utils/budget'
 
 /**
@@ -56,7 +57,7 @@ export default defineEventHandler(async (event) => {
   const used = new Map<string, { bureau: string, team: string, kan: string }>()
   const rows = lines.map((l, i) => {
     const team = teams.find(t => t.bureau === l.bureau && t.team === l.team)!
-    const itemNumber = used.has(l.itemNumber) ? nextItemNumber(used, { bureauNo: team.bureauNo, bureau: l.bureau, team: l.team }, l.kan) : l.itemNumber
+    const itemNumber = used.has(l.itemNumber) ? nextItemNumber(used, { bureauNo: team.bureauNo, bureau: l.bureau, team: l.team }, l.kan, flowOf(l.itemNumber)) : l.itemNumber
     used.set(itemNumber, { bureau: l.bureau, team: l.team, kan: l.kan })
     return {
       id: newId(), term: BUDGET_TERM, roundId: round!.id, itemNumber, bureau: l.bureau, team: l.team,

@@ -74,11 +74,11 @@ async function exportToSheets({ afterAuth = false } = {}) {
 
     <form v-if="open" class="card panel" @submit.prevent="exportToSheets()">
       <p class="hint">
-        対応済みの申請をまとめて、指定したスプレッドシートの「支出詳細」「証憑（支出）」「執行一覧」シートに書き出します（なければ追加、あれば書き直し。ほかのシートはそのまま）。
+        対応済みの申請と確認済みの収入をまとめて、指定したスプレッドシートの「支出詳細」「証憑（支出）」「執行一覧」「収入詳細」シートに書き出します（なければ追加、あれば書き直し。ほかのシートはそのまま）。
         「支出詳細」「証憑（支出）」は、決算総会に出す決算シートと同じ形です。「証憑（支出）」シートから、明細ごとの領収書などを開けます。
       </p>
       <template v-if="config && !config.configured">
-        <p class="error">スプレッドシートに書き出すための Google の設定がされていません。README の「決算シートをスプレッドシートに出力」を見て設定してください。</p>
+        <p class="error">スプレッドシートに書き出すための Google の設定がされていません。</p>
       </template>
       <template v-else-if="config">
         <p class="share">
@@ -104,6 +104,6 @@ async function exportToSheets({ afterAuth = false } = {}) {
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
 .panel { max-width: 40rem; width: 100%; display: grid; gap: .6rem; justify-items: stretch; }
 .panel p { margin: 0; }
-.share code { font-size: .85em; background: var(--bg); padding: 0 .3em; border-radius: 3px; overflow-wrap: anywhere; }
+.share code { font-size: .85em; background: var(--bg); padding: .3em; border-radius: 3px; overflow-wrap: anywhere; }
 .ok { color: var(--done); }
 </style>

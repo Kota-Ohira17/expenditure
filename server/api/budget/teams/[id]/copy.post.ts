@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { budgetCopySchema } from '../../../../../shared/schemas'
+import { flowOf } from '../../../../../shared/budgetCompile'
 
 /**
  * 取り込んだ昨年の本予算・決算の明細を、この担当の明細として①に足す（本予算の集約。その担当の人・財務管理部）。
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
   for (const s of todo) {
     // 番号：取り込んだ番号が、その期の同じ担当の項目のもの（または未使用）ならそのまま
     const owner = used.get(s.itemNumber)
-    const itemNumber = s.itemNumber && (!owner || (owner.bureau === team.bureau && owner.team === team.team)) ? s.itemNumber : nextItemNumber(used, team, s.kan)
+    const itemNumber = s.itemNumber && (!owner || (owner.bureau === team.bureau && owner.team === team.team)) ? s.itemNumber : nextItemNumber(used, team, s.kan, flowOf(s.itemNumber))
     const row = await writeItem(round, null, {
       kan: s.kan, kou: s.kou, moku: s.moku, setsu: s.setsu, quantity: s.quantity, unitPrice: s.unitPrice, amount: s.amount,
       vendor: s.vendor, spec: s.spec, link: s.link, plannedTiming: s.plannedTiming, remark: s.remark, isNew: s.isNew, preExecution: s.preExecution,

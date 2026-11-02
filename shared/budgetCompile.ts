@@ -7,6 +7,17 @@
 
 export type BudgetItemStatus = 'draft' | 'submitted' | 'returned' | 'approved'
 
+/**
+ * 収入と支出。同じ表（①⑦・予算明細）に入れ、項目番号の頭で分ける（収入は in01-01-01、支出は out01-01-01）。
+ * 局の番号は支出の形（out01）で持ち、収入の番号を付けるときは頭を in に替える。
+ */
+export type BudgetFlow = 'income' | 'expense'
+export const FLOW_LABELS: Record<BudgetFlow, string> = { income: '収入', expense: '支出' }
+export const BUDGET_FLOWS: BudgetFlow[] = ['income', 'expense']
+export const flowOf = (itemNumber: string): BudgetFlow => (/^in/i.test(itemNumber) ? 'income' : 'expense')
+/** 局の番号を、収入・支出の頭にする（out01 → in01） */
+export const bureauNoForFlow = (bureauNo: string, flow: BudgetFlow) => bureauNo.replace(/^[a-z]+/i, flow === 'income' ? 'in' : 'out')
+
 export const ITEM_STATUS_LABELS: Record<BudgetItemStatus, string> = {
   draft: '未提出',
   submitted: '査定待ち',

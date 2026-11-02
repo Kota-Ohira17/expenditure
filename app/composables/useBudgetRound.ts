@@ -34,13 +34,18 @@ export function changeOf(i: Pick<BudgetItemView, 'amount' | 'baseAmount' | 'base
 /** 明細の名前（項 / 目 / 節） */
 export const itemName = (i: Pick<BudgetItemView, 'kou' | 'moku' | 'setsu'>) => [i.kou, i.moku, i.setsu].filter(Boolean).join(' / ')
 
-/** 担当ごとの集計（件数・金額・状態ごとの件数） */
+/** 担当ごとの集計（件数・金額・状態ごとの件数）。金額は支出（total・base）と収入（income・incomeBase）を分けて足す */
 export function teamSummary(items: BudgetItemView[]) {
   const live = items.filter(i => !i.deleted)
   const count = (s: BudgetItemView['status']) => items.filter(i => i.status === s).length
+  const sum = (list: BudgetItemView[], f: (i: BudgetItemView) => number) => list.reduce((s, i) => s + f(i), 0)
+  const expense = (i: BudgetItemView) => i.flow !== 'income'
+  const income = (i: BudgetItemView) => i.flow === 'income'
   return {
-    total: live.reduce((s, i) => s + i.amount, 0),
-    base: items.reduce((s, i) => s + (i.baseAmount ?? 0), 0),
+    total: sum(live.filter(expense), i => i.amount),
+    base: sum(items.filter(expense), i => i.baseAmount ?? 0),
+    income: sum(live.filter(income), i => i.amount),
+    incomeBase: sum(items.filter(income), i => i.baseAmount ?? 0),
     draft: count('draft'),
     submitted: count('submitted'),
     returned: count('returned'),

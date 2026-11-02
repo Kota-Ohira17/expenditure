@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { BUDGET_TERM } from '../../shared/constants'
 import { confirmSheetRows } from '../../shared/budgetCompile'
-import type { BudgetItemStatus } from '../../shared/budgetCompile'
+import { bureauNoForFlow, flowOf } from '../../shared/budgetCompile'
+import type { BudgetFlow, BudgetItemStatus } from '../../shared/budgetCompile'
 import { can } from '../../shared/roles'
 import type { BudgetItemRow, BudgetRound, BudgetTeam } from '../db/schema'
 import type { BudgetKind, ParsedBudgetLine, ParsedSheetRow } from './budget'
@@ -127,14 +128,16 @@ const parentOf = (no: string) => no.split('-').slice(0, -1).join('-')
 /**
  * 新しい項目の番号（局-款-項目）。同じ担当に同じ款があればその款の続き、なければその局の次の款の 01。
  * used は、その期で使っている番号と、その番号の行（款・担当を見るため）。
+ * 収入（flow=income）は局の番号の頭を in にして、収入の番号の中で数える（in01-01-01）。
  */
-export function nextItemNumber(used: Map<string, Pick<BudgetItemRow, 'bureau' | 'team' | 'kan'>>, team: Pick<BudgetTeam, 'bureauNo' | 'bureau' | 'team'>, kan: string) {
-  const inBureau = [...used.keys()].filter(no => bureauNoOf(no) === team.bureauNo)
+export function nextItemNumber(used: Map<string, Pick<BudgetItemRow, 'bureau' | 'team' | 'kan'>>, team: Pick<BudgetTeam, 'bureauNo' | 'bureau' | 'team'>, kan: string, flow: BudgetFlow = 'expense') {
+  const bureauNo = bureauNoForFlow(team.bureauNo, flow)
+  const inBureau = [...used.keys()].filter(no => bureauNoOf(no) === bureauNo)
   const sameKan = inBureau.find((no) => {
     const r = used.get(no)!
     return r.bureau === team.bureau && r.team === team.team && r.kan === kan
   })
-  const kanNo = sameKan ? parentOf(sameKan) : `${team.bureauNo}-${pad2(Math.max(0, ...inBureau.map(no => lastSeq(parentOf(no)))) + 1)}`
+  const kanNo = sameKan ? parentOf(sameKan) : `${bureauNo}-${pad2(Math.max(0, ...inBureau.map(no => lastSeq(parentOf(no)))) + 1)}`
   const seq = Math.max(0, ...inBureau.filter(no => parentOf(no) === kanNo).map(lastSeq)) + 1
   return `${kanNo}-${pad2(seq)}`
 }
@@ -226,6 +229,7 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
       teamId: team.id,
       itemNumber: r.itemNumber,
       number: r.itemNumber,
+      flow: flowOf(r.itemNumber),
       ...itemValues(r),
       deleted: r.deleted,
       sortOrder: r.sortOrder,
