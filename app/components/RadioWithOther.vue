@@ -66,7 +66,8 @@ watch(model, (v) => {
 
 <style scoped>
 .radio-group { border: none; padding: 0; margin: 0; display: grid; gap: .3rem; }
-.radio-group legend { font-size: .9rem; padding: 0; margin-bottom: .2rem; }
+/* 枠の見出し（legend の太字・背景）ではなく、ほかの入力欄の名前と同じ見た目にする */
+.radio-group legend { font-size: .9rem; font-weight: 400; padding: 0; margin-bottom: .2rem; background: none; border-radius: 0; }
 .radio { display: flex; align-items: center; gap: .5rem; font-size: .92rem; }
 .radio input[type="radio"] { width: auto; margin: 0; }
 .other-text { flex: 1; max-width: 22rem; padding: .25rem .5rem; }
