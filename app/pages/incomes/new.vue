@@ -124,13 +124,13 @@ async function onSubmit() {
           <p class="hint">入ってきたお金に当たる明細を、表から1つ選んでください。</p>
           <BudgetPicker v-model="pickedKeys" flow="income" single :preferred-bureau="form.department" />
         </template>
-        <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" required @input="nameEdited = true"></label>
+        <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" class="w-m" required @input="nameEdited = true"></label>
       </fieldset>
 
       <fieldset>
         <legend>入金</legend>
-        <div class="row">
-          <label><span>金額（円）<span class="req">*</span></span><YenInput v-model="form.amount" placeholder="例：50000" required /></label>
+        <div class="inline-row">
+          <label><span>金額<span class="req">*</span></span><YenInput v-model="form.amount" placeholder="例：50000" required /></label>
           <label><span>入金日<span class="req">*</span></span><input v-model="form.receivedOn" type="date" required></label>
         </div>
         <label><span>相手先</span><span class="hint">協賛企業・購入者など</span><input v-model="form.payer" class="w-m"></label>
@@ -158,6 +158,8 @@ async function onSubmit() {
 .intro p { margin: .3rem 0; }
 .block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem; }
 .block-label { font-size: .9rem; }
+/* 金額と入金日は短い欄なので、左に詰めて横に並べる */
+.inline-row { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: start; }
 .path { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem; }
 .req { color: var(--danger); margin-left: .15rem; }
 label .hint { display: block; }
