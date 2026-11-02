@@ -1,6 +1,6 @@
 /**
  * 出納帳で、執行・収入のお金がどの口座（現金を含む）から出たか・入ったかを決める。
- * 画面（台帳・収入台帳）とサーバー（出納帳の計算）の両方で使う。
+ * 画面（台帳の支出・収入）とサーバー（出納帳の計算）の両方で使う。
  */
 import type { CashAccount } from './constants'
 import { CASH_ACCOUNTS } from './constants'
