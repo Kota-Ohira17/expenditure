@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
     receivedOn: input.receivedOn,
     payer: input.payer,
     method: input.method,
+    account: input.method === '振込' ? input.account : null,
     remark: input.remark,
     details: line ? {} : { budgetPath: input.budgetPath },
     createdAt: new Date(),

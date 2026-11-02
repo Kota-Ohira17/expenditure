@@ -1,5 +1,5 @@
 import { blob, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
-import { PAYMENT_TYPES } from '../../shared/constants'
+import { CASH_ACCOUNTS, PAYMENT_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
 
 /**
@@ -178,6 +178,8 @@ export const incomeRecords = sqliteTable('income_records', {
   payer: text('payer').notNull().default(''),
   /** 受け取り方（振込・現金・その他） */
   method: text('method').notNull(),
+  /** 振込で受け取った口座（SMBC・ゆうちょ・MUFG）。振込以外は null。出納帳でどの口座に入ったかに使う */
+  account: text('account'),
   remark: text('remark').notNull().default(''),
   /** 予算にない収入の款・項・目・節（budgetPath）など */
   details: text('details', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
@@ -197,6 +199,28 @@ export const incomeFiles = sqliteTable('income_files', {
   uploadedBy: text('uploaded_by').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/**
+ * 出納帳に手で書く記録（財務局長・管理者）。執行・収入から自動で出る出入り以外のもの。
+ * opening＝期首の残高、transfer＝口座間の移動（account → to_account）、adjust＝調整（利息・手数料など。増えたら正）、
+ * check＝残高の照合（通帳・手元の現金で数えたその日の残高。帳簿の残高との差を出す）。
+ */
+export const cashbookRecords = sqliteTable('cashbook_records', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind', { enum: ['opening', 'transfer', 'adjust', 'check'] }).notNull(),
+  /** その記録の日付（YYYY-MM-DD） */
+  date: text('date').notNull(),
+  /** 口座（SMBC・ゆうちょ・MUFG・現金）。移動なら移動元 */
+  account: text('account', { enum: CASH_ACCOUNTS }).notNull(),
+  /** 移動先（移動のときだけ） */
+  toAccount: text('to_account', { enum: CASH_ACCOUNTS }),
+  amount: integer('amount').notNull(),
+  memo: text('memo').notNull().default(''),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type CashbookRecord = typeof cashbookRecords.$inferSelect
 
 /**
  * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。

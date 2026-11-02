@@ -30,6 +30,8 @@ export const PERMISSIONS = {
   reviewBudget: ['budget_officer', ...STAFF],
   /** 委員の登録・権限変更 */
   manageUsers: STAFF,
+  /** 出納帳を見る・期首の残高や移動・調整・残高の照合を記録する */
+  manageCashbook: STAFF,
 } as const satisfies Record<string, readonly Role[]>
 export type Permission = keyof typeof PERMISSIONS
 

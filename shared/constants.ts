@@ -84,6 +84,15 @@ export const REFUND_TIMINGS = ['委員返金と同時', 'できる限り早く']
 
 export const TRANSFER_BANKS = ['SMBC', 'ゆうちょ'] as const
 
+/** 出納帳で残高を見る口座（現金も1つの口座として扱う） */
+export const CASH_ACCOUNTS = ['SMBC', 'ゆうちょ', 'MUFG', '現金'] as const
+export type CashAccount = (typeof CASH_ACCOUNTS)[number]
+/** 収入を振込で受け取る口座 */
+export const BANK_ACCOUNTS = ['SMBC', 'ゆうちょ', 'MUFG'] as const
+/** 出納帳に手で書く記録（期首の残高・口座間の移動・調整・残高の照合） */
+export const CASHBOOK_KINDS = { opening: '期首の残高', transfer: '口座間の移動', adjust: '調整', check: '残高の照合' } as const
+export type CashbookKind = keyof typeof CASHBOOK_KINDS
+
 /** Vercel の関数は 4.5MB までしか受け取れないので、それより少し小さくする */
 export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 

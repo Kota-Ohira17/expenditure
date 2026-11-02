@@ -87,7 +87,7 @@ const pathOf = (i: Income) => (i.details as { budgetPath?: { kan: string, kou: s
               <td class="muted">{{ i.itemNumber }}</td>
               <td>{{ i.itemName }}<small v-if="!i.lineKey" class="tag">予算にない収入</small></td>
               <td class="num">{{ formatYen(i.amount) }}</td>
-              <td>{{ i.method }}</td>
+              <td>{{ i.method }}<small v-if="i.account">（{{ i.account }}）</small></td>
               <td>{{ i.applicantName }}<small>（{{ i.department }}/{{ i.inCharge }}）</small></td>
               <td><span class="badge" :class="i.status === 'done' ? 'complete' : 'checking'">{{ i.status === 'done' ? '確認済み' : '確認待ち' }}</span></td>
               <td :class="{ 'no-evidence': !i.files.length }">{{ i.files.length ? `${i.files.length}件` : '未提出' }}</td>

@@ -4,7 +4,7 @@
  * 収入の予算明細（項目番号が in から始まる）から1つ選ぶか、予算にない収入として款〜節と項目番号を書く。
  * 予算にない収入の項目番号は、局・担当・款を入れると候補が入る（手で直したらそれ以降は上書きしない）。
  */
-import { INCOME_METHODS, bureauCodeOf } from '#shared/constants'
+import { BANK_ACCOUNTS, INCOME_METHODS, bureauCodeOf } from '#shared/constants'
 
 const { user } = useUserSession()
 const { submit, errors, pending } = useSubmit<{ seq: string }>('/api/incomes')
@@ -22,6 +22,7 @@ const form = reactive({
   receivedOn: '',
   payer: '',
   method: '',
+  account: '',
   remark: '',
 })
 const file = ref<File | null>(null)
@@ -122,6 +123,9 @@ async function onSubmit() {
         </div>
         <label>相手先<span class="hint">協賛企業・購入者など</span><input v-model="form.payer"></label>
         <RadioWithOther v-model="form.method" label="受け取り方" :options="INCOME_METHODS" required />
+        <label v-if="form.method === '振込'">受け取った口座<span class="req">*</span><span class="hint">出納帳で、この口座に入ったものとして数えます。</span>
+          <select v-model="form.account" class="fit" required><option value="" disabled>選択</option><option v-for="a in BANK_ACCOUNTS" :key="a">{{ a }}</option></select>
+        </label>
         <label>備考<textarea v-model="form.remark" rows="3" /></label>
         <label>証憑（入金の明細など）<span class="hint">PDF・JPEG・PNG、4MBまで。あとから収入台帳で付けることもできます。</span>
           <input type="file" accept=".pdf,image/*" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null">
