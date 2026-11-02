@@ -51,17 +51,15 @@ const wrap = useTemplateRef<HTMLDivElement>('wrap')
 watch(() => props.lines, () => wrap.value?.scrollTo({ top: 0 }))
 
 /**
- * 本予算「支出」シートと同じく、局・担当・款・項の見出しの行は、その階層の列から右側だけを塗る
- * （目・節の行は塗らない）。項の名前を出している明細の行（項の見出しを出さず1行にまとめた明細・項だけの明細）も、項の行として項の列から塗る。
+ * 本予算「支出」シートと同じく、局・担当・款の見出しの行は、その階層の列から右側だけを塗る
+ * （項・目・節の行は塗らない）。
  * 色は CSS の --fill-*。
  */
 const FILL_FROM: Partial<Record<SheetRow<BudgetLineView>['level'], number>> = Object.fromEntries(
-  (['bureau', 'team', 'kan', 'kou'] as const).map(level => [level, SHEET_COLUMNS.indexOf(level)]),
+  (['bureau', 'team', 'kan'] as const).map(level => [level, SHEET_COLUMNS.indexOf(level)]),
 )
-/** 項の名前を出している明細の行（項の行として塗る） */
-const isKouLine = (row: Row) => row.kind === 'line' && !!row.cells.kou
 function isFilled(row: Row, colIndex: number) {
-  const from = row.kind === 'group' ? FILL_FROM[row.level] : isKouLine(row) ? FILL_FROM.kou : undefined
+  const from = row.kind === 'group' ? FILL_FROM[row.level] : undefined
   return from !== undefined && colIndex >= from
 }
 
@@ -90,7 +88,6 @@ function onRowEnter(row: Row) {
           v-for="row in rows"
           :key="row.id"
           :class="[row.kind, `lv-${row.level}`, {
-            'kou-line': isKouLine(row),
             on: isOn(row),
             pickable: row.line || groupState(row),
             preview: row.line && preview.has(row.line.key),
@@ -132,11 +129,10 @@ function onRowEnter(row: Row) {
 <style scoped>
 .sheet-wrap {
   max-height: 28rem; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
-  /* 本予算「支出」シートと同じ色（局: 黄、担当: 緑、款: 青、項: オレンジ、列見出し: グレー） */
+  /* 本予算「支出」シートと同じ色（局: 黄、担当: 緑、款: 青、列見出し: グレー。項・目・節は白） */
   --fill-bureau: #fff2cc;
   --fill-team: #d9ead3;
   --fill-kan: #c9daf8;
-  --fill-kou: #fce5cd;
   --fill-head: #d9d9d9;
   /* 選択した行・まとめて選ぶ対象の行（ボタンと同じローズベージュ。シートの色とも見分けられる） */
   --row-picked: var(--accent-bg);
@@ -159,11 +155,10 @@ function onRowEnter(row: Row) {
 .sheet .c-qty { width: 4.5rem; }
 .sheet .c-vendor { width: 6rem; }
 
-/* 見出しの行: シートと同じく、その階層の列から右側だけを塗る（目・節は白） */
+/* 見出しの行: シートと同じく、その階層の列から右側だけを塗る（項・目・節は白） */
 tr.group.lv-bureau td.filled { background: var(--fill-bureau); }
 tr.group.lv-team td.filled { background: var(--fill-team); }
 tr.group.lv-kan td.filled { background: var(--fill-kan); }
-tr.group.lv-kou td.filled, tr.kou-line td.filled { background: var(--fill-kou); }
 .sheet td.filled { color: #222; }
 tr.group.lv-bureau td, tr.group.lv-kan td { font-weight: 700; }
 tr.group.lv-team td, tr.group.lv-kou td { font-weight: 600; }
@@ -176,7 +171,6 @@ tr.group.lv-moku td { font-weight: 500; }
   font-size: .72rem; font-weight: 700; line-height: 1.5; color: #333; background: #fff; border: 1px solid #ccc;
 }
 tr.lv-kan .lv-badge { background: var(--fill-kan); border-color: #a4bfee; }
-tr.lv-kou .lv-badge { background: var(--fill-kou); border-color: #f2c69a; }
 .count { font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 tr.line .check { padding-left: .7rem; }
 

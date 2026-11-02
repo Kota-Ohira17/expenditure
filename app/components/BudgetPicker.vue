@@ -206,9 +206,8 @@ function toggleMany(keys: string[], on: boolean) {
 <style scoped>
 .picker { display: grid; gap: .75rem; min-width: 0; }
 .picker {
-  /* 本予算「支出」シートと同じ色（款: 青、項: オレンジ。目・節は白） */
+  /* 本予算「支出」シートと同じ色（款: 青。項・目・節は白） */
   --fill-kan: #c9daf8;
-  --fill-kou: #fce5cd;
 }
 .picked { border: 1px solid var(--accent); border-radius: 6px; padding: .5rem .75rem; display: grid; gap: .5rem; background: var(--sub); }
 .picked-head { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; }
@@ -231,8 +230,7 @@ function toggleMany(keys: string[], on: boolean) {
   display: inline-block; min-width: 1.4em; padding: 0 .3em; border-radius: 3px; text-align: center;
   font-size: .72rem; font-weight: 700; line-height: 1.5; color: #333; background: var(--fill-kan); border: 1px solid #a4bfee;
 }
-.lv-badge.kou { background: var(--fill-kou); border-color: #f2c69a; }
-.lv-badge.moku, .lv-badge.setsu { background: #fff; border-color: #ccc; }
+.lv-badge.kou, .lv-badge.moku, .lv-badge.setsu { background: #fff; border-color: #ccc; }
 .search { max-width: 28rem; }
 .bureau-tabs { display: flex; flex-wrap: wrap; gap: .3rem; border-bottom: 2px solid var(--accent); padding-bottom: .4rem; }
 .bureau-tabs button {
