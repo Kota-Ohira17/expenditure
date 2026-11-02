@@ -87,7 +87,7 @@ const signed = (n: number) => (n > 0 ? `+${formatYen(n)}` : formatYen(n))
       <div class="card">
         <h2>残高の照合</h2>
         <p class="hint">通帳・ネットバンキング・手元の現金で数えた残高を入れると、帳簿の残高との差が出ます。差が0円なら、執行・収入の記録と食い違いはありません。</p>
-        <label class="inline">照合の日<input v-model="checkDate" type="date"></label>
+        <label class="inline"><span>照合の日</span><input v-model="checkDate" type="date"></label>
         <div class="table-wrap">
           <table class="balances">
             <thead>
@@ -148,18 +148,18 @@ const signed = (n: number) => (n > 0 ? `+${formatYen(n)}` : formatYen(n))
             <template v-else>利息・手数料など、執行にも収入にも当たらない増減。減ったときは負の数（例：-220）で入れます。</template>
           </p>
           <div class="fields">
-            <label>日付<span class="req">*</span><input v-model="form.date" type="date" required></label>
-            <label>{{ form.kind === 'transfer' ? '移動元' : '口座' }}<span class="req">*</span>
+            <label><span>日付<span class="req">*</span></span><input v-model="form.date" type="date" required></label>
+            <label><span>{{ form.kind === 'transfer' ? '移動元' : '口座' }}<span class="req">*</span></span>
               <select v-model="form.account" required><option value="" disabled>選択</option><option v-for="a in CASH_ACCOUNTS" :key="a">{{ a }}</option></select>
             </label>
-            <label v-if="form.kind === 'transfer'">移動先<span class="req">*</span>
+            <label v-if="form.kind === 'transfer'"><span>移動先<span class="req">*</span></span>
               <select v-model="form.toAccount" required><option value="" disabled>選択</option><option v-for="a in CASH_ACCOUNTS" :key="a" :disabled="a === form.account">{{ a }}</option></select>
             </label>
-            <label>{{ form.kind === 'opening' ? '残高（円）' : '金額（円）' }}<span class="req">*</span>
+            <label><span>{{ form.kind === 'opening' ? '残高' : '金額' }}<span class="req">*</span></span>
               <input v-if="form.kind === 'adjust'" v-model="form.amount" type="number" step="1" required>
               <YenInput v-else v-model="form.amount" required />
             </label>
-            <label class="memo">{{ form.kind === 'adjust' ? '理由' : 'メモ' }}<span v-if="form.kind === 'adjust'" class="req">*</span><input v-model="form.memo" :required="form.kind === 'adjust'"></label>
+            <label class="memo"><span>{{ form.kind === 'adjust' ? '理由' : 'メモ' }}<span v-if="form.kind === 'adjust'" class="req">*</span></span><input v-model="form.memo" :required="form.kind === 'adjust'"></label>
           </div>
           <div><button type="submit" :disabled="pending">記録</button></div>
         </form>
