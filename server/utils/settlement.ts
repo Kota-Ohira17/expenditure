@@ -48,8 +48,8 @@ export interface Table {
 export const HEADER_FILL = 'D9D9D9'
 /** 決算シートの列見出しの行の色 */
 export const SHEET_HEADER_FILL = 'CCCCCC'
-/** 決算シートの局・担当・款の行の色 */
-const FILL = { bureau: 'FFF2CC', team: 'D9EAD3', kan: 'C9DAF8' } as const
+/** 決算シートの局・担当・款・項の行の色 */
+const FILL = { bureau: 'FFF2CC', team: 'D9EAD3', kan: 'C9DAF8', kou: 'FCE5CD' } as const
 
 /** 決算シートの列幅（ピクセル）を文字数の目安にする */
 const px = (n: number) => n / 7.5
@@ -204,6 +204,7 @@ function sumQuantities(values: string[]) {
 /**
  * 局 → 担当 → 款 の見出しの行を挟みながら明細の行を並べる。
  * 明細の行の 項・目・節 は、上の明細と同じなら空にする（決算シートと同じ書き方）。
+ * 項の下に目・節がある明細では、項だけの行（項の列から塗る）を挟み、明細の行には項を書かない。
  */
 function groupedRows(settled: SettledLine[], cells: {
   bureau: (l: SettledLine, total: number) => Record<string, CellValue>
@@ -231,7 +232,15 @@ function groupedRows(settled: SettledLine[], cells: {
     const newKou = newKan || l.kou !== prev?.kou
     const newMoku = newKou || l.moku !== prev?.moku
     const newSetsu = newMoku || l.setsu !== prev?.setsu
-    rows.push({ values: cells.line(l, { kou: newKou ? l.kou : '', moku: newMoku ? l.moku : '', setsu: newSetsu ? l.setsu : '' }) })
+    // 項の行は項の列から塗る。下に目・節がある明細なら、項だけの行を先に出して明細の行には目・節だけを書く
+    const kouFill = { from: fills.kan[0] + 1, to: fills.kan[1], color: FILL.kou }
+    const deeper = !!(l.moku || l.setsu)
+    if (newKou && l.kou && deeper) rows.push({ values: { kou: l.kou }, fills: [kouFill] })
+    const kou = newKou && !deeper ? l.kou : ''
+    rows.push({
+      values: cells.line(l, { kou, moku: newMoku ? l.moku : '', setsu: newSetsu ? l.setsu : '' }),
+      ...(kou ? { fills: [kouFill] } : {}),
+    })
     prev = l
   }
   return rows
