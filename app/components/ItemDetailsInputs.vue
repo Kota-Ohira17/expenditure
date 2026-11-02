@@ -12,6 +12,8 @@ const props = defineProps<{
   amountLabel?: string
   /** 数量を必須にするか（必須でも、予算の表に数量がない明細は空でよい） */
   requireQuantity?: boolean
+  /** 金額を必須にするか（発注は送料無料の判断に使うので必須） */
+  requireAmount?: boolean
 }>()
 const amounts = defineModel<Record<string, number | ''>>('amounts', { required: true })
 const quantities = defineModel<Record<string, string>>('quantities', { required: true })
@@ -91,7 +93,7 @@ function budgetDiff(key: string, budget: number) {
               <input
                 type="text" inputmode="numeric" autocomplete="off" class="yen" :class="{ invalid: invalid[l.key] }"
                 :value="amountText(l.key)" :aria-label="`${l.label} の金額`" :aria-invalid="invalid[l.key] || undefined"
-                placeholder="未入力"
+                placeholder="未入力" :required="requireAmount"
                 @input="setAmount(l.key, ($event.target as HTMLInputElement).value)"
               >
               <small v-if="invalid[l.key]" class="error">数字で入力してください。</small>

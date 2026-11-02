@@ -101,6 +101,8 @@ export const executionRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('発注'),
     site: required('通販サイト'),
     url: required('商品ページのリンク'), // 複数のリンクを改行で書いてよい
+    /** 商品の金額（税込・送料を除く）。送料無料の基準に届くかの判断に使う */
+    amount: yen,
     quantity: z.string().trim().default(''), // 予算にない項目のときは必須（checkItems）
     deadline: date,
     deliveryPlace: required('配達場所'),

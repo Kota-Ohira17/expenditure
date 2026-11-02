@@ -147,7 +147,7 @@ function buildPayload() {
   }
   switch (methodGroup.value) {
     case '振込': return { ...common, type: '振込', amount: form.amount, deadline: form.transferDeadline, bank: form.bank }
-    case '発注': return { ...common, type: '発注', site: form.site, url: form.url, quantity: form.quantity, deadline: form.neededBy, deliveryPlace: form.deliveryPlace }
+    case '発注': return { ...common, type: '発注', amount: form.amount, site: form.site, url: form.url, quantity: form.quantity, deadline: form.neededBy, deliveryPlace: form.deliveryPlace }
     case '立替': return { ...common, type: '立替', amount: form.amount, purchase: form.purchase, paperReceipt: form.paperReceipt, deadline: form.payPlanDate }
     default: return {
       ...common,
@@ -289,9 +289,16 @@ async function onSubmit() {
           :keys="form.budgetLineKeys"
           :fields="itemFields"
           :require-quantity="methodGroup === '発注'"
-          amount-label="金額"
+          require-amount
+          amount-label="金額（税込）"
         />
-        <label v-else><span>数量<span class="req">*</span></span><input v-model="form.quantity" class="w-m" required></label>
+        <template v-else>
+          <label><span>金額（税込）<span class="req">*</span></span>
+            <YenInput v-model="form.amount" placeholder="例：3000" required @input="onAmountInput" />
+          </label>
+          <label><span>数量<span class="req">*</span></span><input v-model="form.quantity" class="w-m" required></label>
+        </template>
+        <p class="hint">金額は送料を除いた商品の税込金額を入れてください。同じサイトの発注とまとめて送料無料になるかの判断に使います。</p>
         <label><span>いつまでに必要ですか？<span class="req">*</span></span><input v-model="form.neededBy" type="date" required></label>
         <RadioWithOther v-model="form.deliveryPlace" label="配達場所" :options="DELIVERY_PLACES" other required />
         <label>備考<input v-model="form.remark"></label>
