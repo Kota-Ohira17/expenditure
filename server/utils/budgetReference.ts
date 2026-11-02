@@ -1,24 +1,33 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
+import { flowOf } from '../../shared/budgetCompile'
+import { BUDGET_REFERENCE_KINDS } from '../db/schema'
 import type { BudgetRound, BudgetTeam } from '../db/schema'
 import type { SessionUser } from './auth'
 
 /**
- * 本予算の集約で参考にする「昨年の本予算・決算」。どちらも財務管理部が CSV で取り込む。
- * - 本予算：「支出」シート（予算の取り込みと同じ形）
- * - 決算：「支出詳細」シート（MF99_決算の形。このシステムが出す決算シートと同じ）
+ * 本予算の集約で参考にする「昨年の本予算・決算」。支出・収入とも、財務管理部が CSV で取り込む。
+ * - 本予算：「支出」「収入」シート（予算の取り込みと同じ形）
+ * - 決算：「支出詳細」「収入詳細」シート（MF99_決算の形。このシステムが出す決算シートと同じ）
  * 担当の画面には、局・担当の名前が同じ明細を出し、決算は項目番号で本予算の明細に合わせる。
  */
 
-export type ReferenceKind = 'budget' | 'settlement'
-export const REFERENCE_LABELS: Record<ReferenceKind, string> = { budget: '本予算', settlement: '決算' }
+export type ReferenceKind = typeof BUDGET_REFERENCE_KINDS[number]
+export const REFERENCE_LABELS: Record<ReferenceKind, string> = { budget: '本予算（支出）', settlement: '決算（支出）', incomeBudget: '本予算（収入）', incomeSettlement: '決算（収入）' }
+/** 決算の種類か（決算は決算シートの見出し名で読む） */
+const isSettlementKind = (kind: ReferenceKind) => kind === 'settlement' || kind === 'incomeSettlement'
+/** 収入の種類か（項目番号が in から始まる明細だけを読む） */
+const isIncomeKind = (kind: ReferenceKind) => kind === 'incomeBudget' || kind === 'incomeSettlement'
+const SHEET_NAMES: Record<ReferenceKind, string> = { budget: '「支出」シート', settlement: '「支出詳細」シート', incomeBudget: '「収入」シート', incomeSettlement: '「収入詳細」シート' }
 
 /** CSV を読んで、種類ごとに入れ替える */
 export async function importReference(kind: ReferenceKind, fileName: string, data: Uint8Array, user: SessionUser) {
   // 決算は決算シートの見出し名（金額＝決算額）で読む
-  const { lines, sheetRows } = parseBudgetRows(parseCsv(decodeCsv(data)), kind === 'settlement' ? SETTLEMENT_COLUMNS : BUDGET_COLUMNS)
+  const parsed = parseBudgetRows(parseCsv(decodeCsv(data)), isSettlementKind(kind) ? SETTLEMENT_COLUMNS : BUDGET_COLUMNS)
+  // 収入は in、支出は out から始まる項目番号の明細だけを読む（違うシートを選んだときに混ざらないように）
+  const lines = parsed.lines.filter(l => flowOf(l.itemNumber) === (isIncomeKind(kind) ? 'income' : 'expense'))
+  const sheetRows = parsed.sheetRows
   if (!lines.length) {
-    const sheet = kind === 'budget' ? '「支出」シート' : '「支出詳細」シート'
-    throw createError({ statusCode: 400, message: `金額の入った明細が見つかりませんでした。${sheet}の CSV か確認してください。` })
+    throw createError({ statusCode: 400, message: `${isIncomeKind(kind) ? '項目番号が in から始まる' : '項目番号が out から始まる'}、金額の入った明細が見つかりませんでした。${SHEET_NAMES[kind]}の CSV か確認してください。` })
   }
   // 仕様・単価・新規・予算前執行は明細（lines）に持たないので、シートの行から拾う
   const header = sheetRows.find(r => r.role === 'header')?.cells.map(normalizeHeader) ?? []
@@ -90,8 +99,8 @@ export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'b
   // コピーすると、取り込んだ明細の項目番号のまま①に行を足すので、その番号の項目がこの集約にあればコピー済み
   const inRound = new Set([...state.latest.values()].filter(r => !r.deleted).map(r => r.itemNumber))
   const copiedIds = new Set(rows.filter(r => inRound.has(r.itemNumber)).map(r => r.id))
-  const budget = rows.filter(r => r.kind === 'budget')
-  const settlement = rows.filter(r => r.kind === 'settlement')
+  const budget = rows.filter(r => r.kind === 'budget' || r.kind === 'incomeBudget')
+  const settlement = rows.filter(r => r.kind === 'settlement' || r.kind === 'incomeSettlement')
   const actualBy = new Map<string, number>()
   for (const s of settlement) actualBy.set(s.itemNumber, (actualBy.get(s.itemNumber) ?? 0) + s.amount)
   const given = new Set<string>()
@@ -99,10 +108,10 @@ export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'b
     // 同じ番号の明細が複数あるときは、決算は最初の明細にまとめて付ける
     const actual = given.has(b.itemNumber) ? null : (actualBy.get(b.itemNumber) ?? 0)
     given.add(b.itemNumber)
-    return { ...b, budget: b.amount, actual, outside: false, copied: copiedIds.has(b.id) }
+    return { ...b, flow: flowOf(b.itemNumber), budget: b.amount, actual, outside: false, copied: copiedIds.has(b.id) }
   })
   const budgetNumbers = new Set(budget.map(b => b.itemNumber))
   const outside = settlement.filter(s => !budgetNumbers.has(s.itemNumber))
-    .map(s => ({ ...s, budget: null, actual: s.amount, outside: true, copied: copiedIds.has(s.id) }))
+    .map(s => ({ ...s, flow: flowOf(s.itemNumber), budget: null, actual: s.amount, outside: true, copied: copiedIds.has(s.id) }))
   return { files, items: [...items, ...outside] }
 }

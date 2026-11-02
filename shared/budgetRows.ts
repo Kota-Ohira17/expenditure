@@ -3,6 +3,8 @@
  * 画面の予算表（BudgetTable）と、決算シートの出力（/api/settlement.xlsx）の両方で使う。
  */
 
+import { bureauNoForFlow, flowOf } from './budgetCompile'
+
 export const SHEET_COLUMNS = ['number', 'bureau', 'team', 'kan', 'kou', 'moku', 'setsu'] as const
 export type SheetCol = (typeof SHEET_COLUMNS)[number]
 
@@ -69,7 +71,8 @@ function value(l: SheetLine, level: Level) {
  */
 function headerCells(l: SheetLine, level: Level): SheetRow<SheetLine>['cells'] {
   switch (level) {
-    case 'bureau': return { number: l.bureauNo, bureau: l.bureau }
+    // 局の番号は支出の形（out01）で持っているので、収入の明細なら頭を in にする
+    case 'bureau': return { number: l.itemNumber ? bureauNoForFlow(l.bureauNo, flowOf(l.itemNumber)) : l.bureauNo, bureau: l.bureau }
     case 'team': return { team: l.team }
     case 'kan': return { number: l.kanNo, kan: l.kan }
     case 'kou': return { kou: l.kou }

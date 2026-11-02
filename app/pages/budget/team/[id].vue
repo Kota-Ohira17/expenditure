@@ -41,23 +41,28 @@ const toggle = (kan: string) => (folded.has(kan) ? folded.delete(kan) : folded.a
 /** 昨年の本予算・決算（財務管理部が取り込んだもの。本予算の集約のときの参考。1件・款ごと・すべてをコピーできる） */
 const { data: reference, refresh: refreshReference } = await useFetch(`/api/budget/teams/${teamId}/reference`)
 type RefItem = NonNullable<NonNullable<typeof reference.value>>['items'][number]
-const refFile = (kind: 'budget' | 'settlement') => reference.value?.files.find(f => f.kind === kind)
-/** 款ごとにまとめる。予算外の決算は最後に1つにまとめる */
+const refFile = (kind: 'budget' | 'settlement' | 'incomeBudget' | 'incomeSettlement') => reference.value?.files.find(f => f.kind === kind)
+/** 収入・支出ごとに、款でまとめる。予算外の決算はそれぞれの最後に1つにまとめる */
 const refKans = computed(() => {
   const groups = new Map<string, RefItem[]>()
   for (const i of reference.value?.items ?? []) {
-    const key = i.outside ? '\u0000' : i.kan
+    const key = `${i.flow}|${i.outside ? '\u0000' : i.kan}`
     groups.set(key, [...(groups.get(key) ?? []), i])
   }
   return [...groups].map(([key, list]) => ({
     key,
-    kan: key === '\u0000' ? '予算外の決算' : key,
+    flow: list[0]!.flow,
+    kan: list[0]!.outside ? '予算外の決算' : list[0]!.kan,
     list,
     budget: list.reduce((s, i) => s + (i.budget ?? 0), 0),
     actual: list.reduce((s, i) => s + (i.actual ?? 0), 0),
   }))
 })
-const refTotal = computed(() => refKans.value.reduce((s, k) => ({ budget: s.budget + k.budget, actual: s.actual + k.actual }), { budget: 0, actual: 0 }))
+/** 昨年の参考の合計（収入・支出それぞれ） */
+const refTotalOf = (flow: BudgetFlow) => refKans.value.filter(k => k.flow === flow).reduce((s, k) => ({ budget: s.budget + k.budget, actual: s.actual + k.actual }), { budget: 0, actual: 0 })
+const refTotal = computed(() => refTotalOf('expense'))
+const refIncomeTotal = computed(() => refTotalOf('income'))
+const refSections = computed(() => BUDGET_FLOWS.map(flow => ({ flow, kans: refKans.value.filter(k => k.flow === flow) })).filter(s => s.kans.length))
 const notCopied = (list: RefItem[]) => list.filter(i => !i.copied).map(i => i.id)
 /** はじめは、まだ明細がないときだけ開いておく */
 const refOpen = ref(items.value.length === 0)
@@ -127,7 +132,8 @@ function addTo(flow: BudgetFlow, kan: string) {
       <div class="card head">
         <p>
           支出 <strong>{{ formatYen(summary.total) }}</strong>（{{ view.round.kind === '本予算' ? `昨年の予算 ${formatYen(refTotal.budget)}` : `もとの予算 ${formatYen(summary.base)}` }}）・
-          収入 <strong>{{ formatYen(summary.income) }}</strong><template v-if="view.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.incomeBase) }}）</template>・
+          収入 <strong>{{ formatYen(summary.income) }}</strong>（{{ view.round.kind === '本予算' ? `昨年の予算 ${formatYen(refIncomeTotal.budget)}` : `もとの予算 ${formatYen(summary.incomeBase)}` }}）・
+          収支 <strong>{{ formatYen(summary.income - summary.total) }}</strong>・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
@@ -229,7 +235,7 @@ function addTo(flow: BudgetFlow, kan: string) {
           </button>
           <div class="ref-title">
             <h2>昨年の本予算・決算（参考）</h2>
-            <span class="muted">予算 {{ formatYen(refTotal.budget) }} ／ 決算 {{ formatYen(refTotal.actual) }}</span>
+            <span class="muted">収入 予算 {{ formatYen(refIncomeTotal.budget) }} ／ 決算 {{ formatYen(refIncomeTotal.actual) }}・支出 予算 {{ formatYen(refTotal.budget) }} ／ 決算 {{ formatYen(refTotal.actual) }}</span>
           </div>
           <button
             v-if="canAdd && notCopied(reference.items).length" class="secondary" :disabled="pending"
@@ -240,12 +246,14 @@ function addTo(flow: BudgetFlow, kan: string) {
         </header>
         <div v-if="refOpen" class="ref-body">
           <p class="hint">
-            財務管理部が取り込んだ昨年の本予算と決算です（本予算：{{ refFile('budget')?.fileName || '未取り込み' }} ／ 決算：{{ refFile('settlement')?.fileName || '未取り込み' }}）。
+            財務管理部が取り込んだ昨年の本予算と決算です（収入の本予算：{{ refFile('incomeBudget')?.fileName || '未取り込み' }} ／ 収入の決算：{{ refFile('incomeSettlement')?.fileName || '未取り込み' }} ／ 支出の本予算：{{ refFile('budget')?.fileName || '未取り込み' }} ／ 支出の決算：{{ refFile('settlement')?.fileName || '未取り込み' }}）。
             使える明細はコピーして、内容を確認してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は項目番号で本予算の明細に合わせています。
           </p>
           <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。財務管理部が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
           <p v-else-if="!reference.items.length" class="hint">取り込んだ本予算・決算に、この担当（{{ team.bureau }} ／ {{ team.team }}）の明細はありません。</p>
-          <div v-for="k in refKans" :key="k.key" class="kan">
+          <template v-for="sec in refSections" :key="sec.flow">
+          <h3 class="flow-head" :class="sec.flow">{{ FLOW_LABELS[sec.flow] }}の部</h3>
+          <div v-for="k in sec.kans" :key="k.key" class="kan">
             <div class="kan-head">
               <h3>{{ k.kan || '（款なし）' }}</h3>
               <span class="muted">予算 {{ formatYen(k.budget) }} ／ 決算 {{ formatYen(k.actual) }}</span>
@@ -273,6 +281,7 @@ function addTo(flow: BudgetFlow, kan: string) {
               </table>
             </div>
           </div>
+          </template>
         </div>
       </section>
 

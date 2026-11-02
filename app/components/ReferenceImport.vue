@@ -1,16 +1,18 @@
 <script setup lang="ts">
 /**
- * 昨年の本予算・決算の取り込み（集約の画面、財務管理部）。本予算は「支出」シート、決算は「支出詳細」シートの CSV。
+ * 昨年の本予算・決算の取り込み（集約の画面、財務管理部）。支出は「支出」「支出詳細」シート、収入は「収入」「収入詳細」シートの CSV。
  * 取り込んだものは、本予算の集約のとき担当の画面に参考として出る（コピーして使える）。取り込み直すと入れ替わる。
  */
 const { data: files, refresh } = await useFetch('/api/budget/references', { default: () => [] })
 const KINDS = [
-  { kind: 'budget', label: '本予算', sheet: '「支出」シート' },
-  { kind: 'settlement', label: '決算', sheet: '「支出詳細」シート' },
+  { kind: 'incomeBudget', label: '本予算（収入）', sheet: '「収入」シート' },
+  { kind: 'incomeSettlement', label: '決算（収入）', sheet: '「収入詳細」シート' },
+  { kind: 'budget', label: '本予算（支出）', sheet: '「支出」シート' },
+  { kind: 'settlement', label: '決算（支出）', sheet: '「支出詳細」シート' },
 ] as const
 type Kind = typeof KINDS[number]['kind']
 const fileOf = (kind: Kind) => files.value.find(f => f.kind === kind)
-const picked = reactive<Record<Kind, File | null>>({ budget: null, settlement: null })
+const picked = reactive<Record<Kind, File | null>>({ budget: null, settlement: null, incomeBudget: null, incomeSettlement: null })
 const pending = ref<Kind | null>(null)
 const errors = ref<string[]>([])
 const message = ref('')
@@ -55,7 +57,7 @@ const when = (d: string | Date) => new Date(d).toLocaleString('ja-JP', { month: 
 <template>
   <div class="card ref-import">
     <h2>昨年の本予算・決算の取り込み</h2>
-    <p class="hint">本予算の集約では、ここで取り込んだ本予算と決算が担当の画面に参考として出て、各担当が選んでコピーできます。CSV（UTF-8 / Shift_JIS）で取り込みます。</p>
+    <p class="hint">本予算の集約では、ここで取り込んだ収入・支出の本予算と決算が担当の画面に参考として出て、各担当が選んでコピーできます。CSV（UTF-8 / Shift_JIS）で取り込みます。収入は項目番号が in から、支出は out から始まる明細だけを読みます。</p>
     <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
     <p v-if="message" class="ok">{{ message }}</p>
     <div v-for="k in KINDS" :key="k.kind" class="row">

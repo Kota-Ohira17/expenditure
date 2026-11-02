@@ -442,7 +442,8 @@ export type BudgetReview = typeof budgetReviews.$inferSelect
  * 本予算の集約で参考にする、取り込んだ昨年の本予算・決算の明細。
  * 本予算は「支出」シート、決算は「支出詳細」シートの CSV から取り込む。種類ごとに、取り込み直すと入れ替える。
  */
-export const BUDGET_REFERENCE_KINDS = ['budget', 'settlement'] as const
+/** 昨年の参考の種類（支出の本予算・決算と、収入の本予算・決算） */
+export const BUDGET_REFERENCE_KINDS = ['budget', 'settlement', 'incomeBudget', 'incomeSettlement'] as const
 export const budgetReferences = sqliteTable('budget_references', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   kind: text('kind', { enum: BUDGET_REFERENCE_KINDS }).notNull(),

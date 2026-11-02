@@ -52,13 +52,16 @@ watch(() => props.lines, () => wrap.value?.scrollTo({ top: 0 }))
 
 /**
  * 本予算「支出」シートと同じく、局・担当・款・項の見出しの行は、その階層の列から右側だけを塗る
- * （目・節・明細の行は塗らない）。色は CSS の --fill-*。
+ * （目・節の行は塗らない）。項の名前を出している明細の行（項の見出しを出さず1行にまとめた明細・項だけの明細）も、項の行として項の列から塗る。
+ * 色は CSS の --fill-*。
  */
 const FILL_FROM: Partial<Record<SheetRow<BudgetLineView>['level'], number>> = Object.fromEntries(
   (['bureau', 'team', 'kan', 'kou'] as const).map(level => [level, SHEET_COLUMNS.indexOf(level)]),
 )
+/** 項の名前を出している明細の行（項の行として塗る） */
+const isKouLine = (row: Row) => row.kind === 'line' && !!row.cells.kou
 function isFilled(row: Row, colIndex: number) {
-  const from = row.kind === 'group' ? FILL_FROM[row.level] : undefined
+  const from = row.kind === 'group' ? FILL_FROM[row.level] : isKouLine(row) ? FILL_FROM.kou : undefined
   return from !== undefined && colIndex >= from
 }
 
@@ -87,6 +90,7 @@ function onRowEnter(row: Row) {
           v-for="row in rows"
           :key="row.id"
           :class="[row.kind, `lv-${row.level}`, {
+            'kou-line': isKouLine(row),
             on: isOn(row),
             pickable: row.line || groupState(row),
             preview: row.line && preview.has(row.line.key),
@@ -159,7 +163,7 @@ function onRowEnter(row: Row) {
 tr.group.lv-bureau td.filled { background: var(--fill-bureau); }
 tr.group.lv-team td.filled { background: var(--fill-team); }
 tr.group.lv-kan td.filled { background: var(--fill-kan); }
-tr.group.lv-kou td.filled { background: var(--fill-kou); }
+tr.group.lv-kou td.filled, tr.kou-line td.filled { background: var(--fill-kou); }
 .sheet td.filled { color: #222; }
 tr.group.lv-bureau td, tr.group.lv-kan td { font-weight: 700; }
 tr.group.lv-team td, tr.group.lv-kou td { font-weight: 600; }
