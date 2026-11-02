@@ -3,7 +3,7 @@ import { budgetTeamSchema } from '../../../../shared/schemas'
 
 /** 担当の名前（英語の略称）と日本語名を直す（財務管理部）。名前を変えたら、この集約の明細の行と、割り当てた人も新しい名前に付け替える */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const { team, round } = await openTeamOr404(Number(getRouterParam(event, 'id')))
   const { team: name, nameJa } = parseOr400(budgetTeamSchema.safeParse(await readBody(event)))
   const db = useDb()

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * 局・部・担当と、入力する人（財務管理部）。局の中に部、部の中に担当を持つ（部に入らない局の直属の担当もある）。
+ * 局・部・担当と、入力する人（集約の段取り。管理者と財務局長補佐（ZAI の zas）だけ）。局の中に部、部の中に担当を持つ（部に入らない局の直属の担当もある）。
  * 局ごとに、局の名前・局の番号を直し（局の中の担当すべてに反映）、部を足す・直す・消す（消すと中の担当は局の直属に戻る）、
  * 担当を足す・直す・部に入れる、各担当に明細を入力する人を割り当てる（1人が持てる担当は1つ）。局そのものも足せる。
  */
-const { can } = usePermissions()
-if (!can('reviewBudget')) await navigateTo('/budget')
+const { data: access } = await useFetch('/api/budget/access', { default: () => ({ canArrange: false }) })
+if (!access.value.canArrange) await navigateTo('/budget/collect')
 const { data: view, refresh } = await useBudgetRound()
 const { data: people, refresh: refreshPeople } = await useFetch('/api/budget/people', { default: () => [] })
 

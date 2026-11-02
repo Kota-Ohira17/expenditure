@@ -87,60 +87,78 @@ async function onSubmit() {
     </div>
 
     <form v-else @submit.prevent="onSubmit">
-      <p class="intro">協賛金・売上など、入ってきたお金を記録するフォームです。収入の予算（項目番号が in から始まるもの）から項目を選んでください。</p>
+      <div class="intro">
+        <p>協賛金・売上など、入ってきたお金を記録するフォームです。</p>
+        <p>収入の予算（項目番号が in から始まるもの）から項目を選んでください。予算にない収入は手入力できます。</p>
+      </div>
+
       <fieldset>
-        <legend>収入の記録</legend>
+        <legend>記録する人</legend>
         <label><span>記録する人の氏名<span class="req">*</span></span><input v-model="form.applicantName" class="w-m" required></label>
         <div class="row">
           <BureauField v-model="form.department" all />
-          <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" required></label>
+          <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
         </div>
+      </fieldset>
 
-        <div class="block">
-          <span class="block-label">収入項目<span class="req">*</span></span>
-          <template v-if="useManual">
-            <p v-if="!lines.length" class="hint">収入の予算がまだないので、項目を手入力してください。</p>
-            <div class="path">
-              <label><span>款<span class="req">*</span></span><input v-model="form.budgetPath.kan" required></label>
-              <label>項<input v-model="form.budgetPath.kou"></label>
-              <label>目<input v-model="form.budgetPath.moku"></label>
-              <label>節<input v-model="form.budgetPath.setsu"></label>
-            </div>
-            <label>項目番号
-              <span class="hint">局・担当・款を入れると、収入の番号の付け方で候補が入ります（in から始まる番号）。必要なら書き換えてください。</span>
-              <input v-model="form.itemNumber" placeholder="in01-01-01" required @input="numberEdited = true">
-            </label>
-          </template>
-          <template v-else>
-            <p class="hint">収入の予算の表から、入ってきたお金に当たる明細を1つ選んでください。</p>
-            <BudgetPicker v-model="pickedKeys" flow="income" single :preferred-bureau="form.department" />
-          </template>
+      <fieldset>
+        <legend>収入項目</legend>
+        <div class="block-head">
+          <span class="block-label">{{ useManual ? '予算にない収入' : '収入の予算から選ぶ' }}<span class="req">*</span></span>
           <button v-if="lines.length" type="button" class="link" @click="manual = !manual">{{ manual ? '予算から選ぶ' : '予算にない収入を手入力する' }}</button>
-          <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" required @input="nameEdited = true"></label>
         </div>
+        <template v-if="useManual">
+          <p class="hint">{{ lines.length ? '予算にない収入の款・項・目・節と項目番号を書いてください。' : '収入の予算がまだないので、項目を手入力してください。' }}</p>
+          <div class="path">
+            <label><span>款<span class="req">*</span></span><input v-model="form.budgetPath.kan" required></label>
+            <label><span>項</span><input v-model="form.budgetPath.kou"></label>
+            <label><span>目</span><input v-model="form.budgetPath.moku"></label>
+            <label><span>節</span><input v-model="form.budgetPath.setsu"></label>
+          </div>
+          <label><span>項目番号<span class="req">*</span></span>
+            <span class="hint">局・担当・款を入れると、収入の番号の付け方で候補が入ります（in から始まる番号）。必要なら書き換えてください。</span>
+            <input v-model="form.itemNumber" class="w-m" placeholder="in01-01-01" required @input="numberEdited = true">
+          </label>
+        </template>
+        <template v-else>
+          <p class="hint">入ってきたお金に当たる明細を、表から1つ選んでください。</p>
+          <BudgetPicker v-model="pickedKeys" flow="income" single :preferred-bureau="form.department" />
+        </template>
+        <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" required @input="nameEdited = true"></label>
+      </fieldset>
 
+      <fieldset>
+        <legend>入金</legend>
         <div class="row">
-          <label><span>金額（円）<span class="req">*</span></span><YenInput v-model="form.amount" required /></label>
+          <label><span>金額（円）<span class="req">*</span></span><YenInput v-model="form.amount" placeholder="例：50000" required /></label>
           <label><span>入金日<span class="req">*</span></span><input v-model="form.receivedOn" type="date" required></label>
         </div>
-        <label>相手先<span class="hint">協賛企業・購入者など</span><input v-model="form.payer"></label>
+        <label><span>相手先</span><span class="hint">協賛企業・購入者など</span><input v-model="form.payer" class="w-m"></label>
         <RadioWithOther v-model="form.method" label="受け取り方" :options="INCOME_METHODS" required />
-        <label v-if="form.method === '振込'">受け取った口座<span class="req">*</span><span class="hint">出納帳で、この口座に入ったものとして数えます。</span>
+        <label v-if="form.method === '振込'"><span>受け取った口座<span class="req">*</span></span>
+          <span class="hint">出納帳で、この口座に入ったものとして数えます。</span>
           <select v-model="form.account" class="fit" required><option value="" disabled>選択</option><option v-for="a in BANK_ACCOUNTS" :key="a">{{ a }}</option></select>
         </label>
-        <label>備考<textarea v-model="form.remark" rows="3" /></label>
-        <label>証憑（入金の明細など）<span class="hint">PDF・JPEG・PNG、4MBまで。あとから台帳の「収入」で付けることもできます。</span>
+        <label><span>備考</span><textarea v-model="form.remark" rows="3" /></label>
+        <label><span>証憑（入金の明細など）</span>
+          <span class="hint">PDF・JPEG・PNG、4MBまで。あとから台帳の「収入」で付けることもできます。</span>
           <input type="file" accept=".pdf,image/*" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null">
         </label>
       </fieldset>
+
       <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
-      <button type="submit" :disabled="pending">{{ pending ? '送信中…' : '記録' }}</button>
+      <div><button type="submit" :disabled="pending">{{ pending ? '送信中…' : '記録' }}</button></div>
     </form>
   </section>
 </template>
 
 <style scoped>
-.block { display: grid; gap: .6rem; }
+/* 執行依頼のフォームとそろえる */
+.intro { border-left: 4px solid var(--accent); padding: .5rem .9rem; font-size: .9rem; background: var(--sub); border-radius: 0 6px 6px 0; }
+.intro p { margin: .3rem 0; }
+.block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.block-label { font-size: .9rem; }
 .path { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem; }
 .req { color: var(--danger); margin-left: .15rem; }
+label .hint { display: block; }
 </style>

@@ -1,6 +1,6 @@
 /** 集約中の未提出・要修正の明細を、すべての担当でまとめて提出する（財務管理部）。査定待ちになる */
 export default defineEventHandler(async (event) => {
-  const user = await requirePermission(event, 'reviewBudget')
+  const user = await requireArrangeBudget(event)
   const round = await openRoundOr404(Number(getRouterParam(event, 'id')))
   assertPhase(round, 'collecting')
   const numbers = await numbersWhere(round, s => s === 'draft' || s === 'returned')

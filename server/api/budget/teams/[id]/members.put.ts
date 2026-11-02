@@ -3,7 +3,7 @@ import { budgetMembersSchema } from '../../../../../shared/schemas'
 
 /** 担当に入力する人を割り当てる（財務管理部）。一覧にない人は、この担当から外れる。1人が持てる担当は1つ */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'reviewBudget')
+  await requireArrangeBudget(event)
   const { team } = await openTeamOr404(Number(getRouterParam(event, 'id')))
   const { emails } = parseOr400(budgetMembersSchema.safeParse(await readBody(event)))
   const db = useDb()

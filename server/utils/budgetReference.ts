@@ -1,6 +1,4 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
-import type { H3Event } from 'h3'
-import { bureauNameOf } from '../../shared/constants'
 import { flowOf } from '../../shared/budgetCompile'
 import { BUDGET_REFERENCE_KINDS } from '../db/schema'
 import type { BudgetRound, BudgetTeam } from '../db/schema'
@@ -118,19 +116,3 @@ export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'b
   return { files, items: [...items, ...outside] }
 }
 
-/**
- * 昨年の本予算・決算を取り込める・消せる人：管理者と、財務局（ZAI）の zas 担当に割り当てられた人（ユーザー管理の「予算を入力する担当」）。
- * 財務管理部・財務局長でも、zas に割り当てられていなければできない。
- */
-export async function canImportReferences(user: SessionUser) {
-  if (user.role === 'admin') return true
-  const me = await useDb().query.users.findFirst({ where: eq(schema.users.email, user.email) })
-  return !!me && me.budgetBureau === bureauNameOf('ZAI') && me.budgetTeam.toLowerCase() === 'zas'
-}
-
-/** 取り込める人でなければ 403 */
-export async function requireImportReferences(event: H3Event) {
-  const user = await requireUser(event)
-  if (!(await canImportReferences(user))) throw createError({ statusCode: 403, message: '昨年の本予算・決算の取り込みは、管理者と財務局（ZAI）の zas 担当だけができます。' })
-  return user
-}
