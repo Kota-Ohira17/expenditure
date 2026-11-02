@@ -10,6 +10,12 @@ const bankLinks: Record<(typeof TRANSFER_BANKS)[number], string> = { SMBC: bankL
 const route = useRoute()
 const router = useRouter()
 
+/** 支出（執行依頼）と収入のどちらを見るか。収入の一覧は IncomeLedger */
+const flow = computed<'expense' | 'income'>({
+  get: () => (route.query.flow === 'income' ? 'income' : 'expense'),
+  set: v => router.replace({ query: v === 'income' ? { flow: 'income' } : {} }),
+})
+
 const view = computed<ViewKey>({
   get: () => (String(route.query.view ?? 'deadline') in VIEWS ? route.query.view : 'deadline') as ViewKey,
   set: v => router.replace({ query: { view: v } }),
@@ -216,184 +222,197 @@ async function setDone(row: Row, done: boolean) {
       <SettlementExport v-if="can('exportSettlement')" />
     </div>
 
-    <nav class="tabs">
-      <button
-        v-for="(label, key) in VIEWS"
-        :key="key"
-        :class="{ active: view === key }"
-        @click="view = key"
-      >
-        {{ label }}
-      </button>
+    <nav class="flow-tabs" aria-label="支出と収入の切り替え">
+      <button type="button" :class="{ active: flow === 'expense' }" @click="flow = 'expense'">支出</button>
+      <button type="button" :class="{ active: flow === 'income' }" @click="flow = 'income'">収入</button>
     </nav>
 
-    <nav v-if="view === '発注' && orderSites.length" class="tabs site-tabs" aria-label="通販サイトで絞り込む">
-      <span class="site-tabs-label">通販サイト：</span>
-      <button :class="{ active: siteFilter === '' }" @click="siteFilter = ''">すべて</button>
-      <button v-for="s in orderSites" :key="s" :class="{ active: siteFilter === s }" @click="siteFilter = s">
-        {{ s }}
-        <small v-if="pendingCount(s)" :title="`未対応 ${pendingCount(s)}件`">{{ pendingCount(s) }}</small>
-      </button>
-    </nav>
+    <IncomeLedger v-if="flow === 'income'" />
+    <template v-else>
+      <nav class="tabs">
+        <button
+          v-for="(label, key) in VIEWS"
+          :key="key"
+          :class="{ active: view === key }"
+          @click="view = key"
+        >
+          {{ label }}
+        </button>
+      </nav>
 
-    <OrderBatch
-      v-if="batchRows.length && can('executeEntries')"
-      :site="siteFilter"
-      :rows="batchRows"
-      @done="refresh"
-    />
-    <p v-else-if="view === '発注' && !siteFilter && orderSummary.length && can('executeEntries')" class="hint">
-      通販サイトを選ぶと、そのサイトの未対応の発注をまとめて対応済みにできます。
-    </p>
+      <nav v-if="view === '発注' && orderSites.length" class="tabs site-tabs" aria-label="通販サイトで絞り込む">
+        <span class="site-tabs-label">通販サイト：</span>
+        <button :class="{ active: siteFilter === '' }" @click="siteFilter = ''">すべて</button>
+        <button v-for="s in orderSites" :key="s" :class="{ active: siteFilter === s }" @click="siteFilter = s">
+          {{ s }}
+          <small v-if="pendingCount(s)" :title="`未対応 ${pendingCount(s)}件`">{{ pendingCount(s) }}</small>
+        </button>
+      </nav>
 
-    <section v-if="orderSummary.length" class="order-summary" aria-label="未対応の発注（サイト別）">
-      <strong>未対応の発注（サイト別）</strong>
-      <ul>
-        <li v-for="s in orderSummary" :key="s.site">
-          <NuxtLink :to="{ query: { view: '発注', site: s.site } }">{{ s.site }}</NuxtLink>：{{ s.count }}件・合計{{ yen(s.total) }}
-          <span v-if="s.freeFrom == null" class="muted">（送料無料の基準なし。まとめて発注すると送料1回分）</span>
-          <span v-else-if="s.total >= s.freeFrom" class="ok">まとめれば送料無料（基準 {{ yen(s.freeFrom) }}）</span>
-          <span v-else class="short">送料無料まであと{{ yen(s.freeFrom - s.total) }}（基準 {{ yen(s.freeFrom) }}）</span>
-        </li>
-      </ul>
-    </section>
+      <OrderBatch
+        v-if="batchRows.length && can('executeEntries')"
+        :site="siteFilter"
+        :rows="batchRows"
+        @done="refresh"
+      />
+      <p v-else-if="view === '発注' && !siteFilter && orderSummary.length && can('executeEntries')" class="hint">
+        通販サイトを選ぶと、そのサイトの未対応の発注をまとめて対応済みにできます。
+      </p>
 
-    <p v-if="!shownEntries.length" class="empty">該当する申請はありません。</p>
+      <section v-if="orderSummary.length" class="order-summary" aria-label="未対応の発注（サイト別）">
+        <strong>未対応の発注（サイト別）</strong>
+        <ul>
+          <li v-for="s in orderSummary" :key="s.site">
+            <NuxtLink :to="{ query: { view: '発注', site: s.site } }">{{ s.site }}</NuxtLink>：{{ s.count }}件・合計{{ yen(s.total) }}
+            <span v-if="s.freeFrom == null" class="muted">（送料無料の基準なし。まとめて発注すると送料1回分）</span>
+            <span v-else-if="s.total >= s.freeFrom" class="ok">まとめれば送料無料（基準 {{ yen(s.freeFrom) }}）</span>
+            <span v-else class="short">送料無料まであと{{ yen(s.freeFrom - s.total) }}（基準 {{ yen(s.freeFrom) }}）</span>
+          </li>
+        </ul>
+      </section>
 
-    <div v-else class="table-wrap ledger-wrap">
-      <table class="ledger">
-        <thead>
-          <tr>
-            <th>番号</th><th>申請日</th><th>項目番号</th><th>支出項目</th><th>数量</th>
-            <th>金額</th><th>形態</th><th>期限・予定日</th><th>申請者</th><th>状態</th><th>証憑</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="row in shownEntries" :key="row.id">
-            <tr class="clickable" :class="{ done: row.status === 'done' }" @click="toggle(row)">
-              <td class="c-seq">{{ row.seq }}</td>
-              <td class="c-date">{{ dateTime(row.createdAt) }}</td>
-              <td data-label="項目番号">{{ shortenItemNumbers(row.itemNumber) }}</td>
-              <td class="c-name">{{ row.itemName }}</td>
-              <td data-label="数量">{{ row.quantity }}</td>
-              <td class="num c-amount">{{ yen(row.amount) }}</td>
-              <td data-label="形態">{{ methodLabel(row) }}</td>
-              <td data-label="期限・予定日">{{ row.deadline }}</td>
-              <td data-label="申請者">{{ row.applicantName }}<small>（{{ row.department }}/{{ row.inCharge }}）</small></td>
-              <td class="c-status">
-                <span class="badge" :class="stageOf(row)">{{ STAGE_LABELS[stageOf(row)] }}</span>
-                <small v-if="row.status === 'done'" class="executed-at">{{ dateTime(row.executedAt) }}</small>
-              </td>
-              <td data-label="証憑" :class="{ 'no-evidence': !hasEvidence(row) }">{{ evidenceStatus(row) }}</td>
+      <p v-if="!shownEntries.length" class="empty">該当する申請はありません。</p>
+
+      <div v-else class="table-wrap ledger-wrap">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th>番号</th><th>申請日</th><th>項目番号</th><th>支出項目</th><th>数量</th>
+              <th>金額</th><th>形態</th><th>期限・予定日</th><th>申請者</th><th>状態</th><th>証憑</th>
             </tr>
-            <tr v-if="opened === row.id" class="detail">
-              <td colspan="11">
-                <EvidenceCheck :entry="row" :has-evidence="hasEvidence(row)" @changed="refresh" />
-                <EvidenceSection v-if="row.kind === 'execution'" :entry="row" @changed="refresh" />
-                <ShippingNotice
-                  v-if="row.type === '発注' && row.status === 'pending'"
-                  class="shipping-in-row"
-                  :advice="shippingAdvice(siteOf(row), orderAmountOf(row), pendingOrdersOf(entries, siteOf(row), row.id))"
-                  :site="siteOf(row)"
-                />
-                <div v-if="row.items.length" class="items">
-                  <strong>予算明細（{{ row.items.length }}件）</strong>
-                  <table class="items-table">
-                    <thead>
-                      <tr><th>項目番号</th><th>明細</th><th>数量</th><th>取引先</th><th class="num">予算額</th><th class="num">執行額</th><th class="num">予算比</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="i in row.items" :key="i.id">
-                        <td class="muted">{{ i.itemNumber }}</td>
-                        <td>{{ i.label }}</td>
-                        <td>
-                          <input v-if="can('executeEntries')" v-model="quantityDrafts[i.id]" class="text-input" autocomplete="off" :aria-label="`${i.label} の数量`">
-                          <template v-else>{{ quantityOf(i) }}</template>
-                          <small v-if="quantityOf(i) !== i.quantity" class="muted was">予算: {{ i.quantity || 'なし' }}</small>
-                        </td>
-                        <td>
-                          <input v-if="can('executeEntries')" v-model="vendorDrafts[i.id]" class="text-input" autocomplete="off" :aria-label="`${i.label} の取引先`">
-                          <template v-else>{{ vendorOf(i) }}</template>
-                          <small v-if="vendorOf(i) !== i.vendor" class="muted was">予算: {{ i.vendor || 'なし' }}</small>
-                        </td>
-                        <td class="num">{{ formatYen(i.budgetAmount) }}</td>
-                        <td class="num">
-                          <input
-                            v-if="can('executeEntries')"
-                            v-model="itemDrafts[i.id]"
-                            type="text"
-                            inputmode="numeric"
-                            autocomplete="off"
-                            placeholder="未入力"
-                            :class="{ invalid: invalidItem(i.id) }"
-                            :aria-invalid="invalidItem(i.id) || undefined"
-                            :aria-label="`${i.label} の執行額`"
-                          >
-                          <template v-else>{{ i.actualAmount == null ? '未入力' : formatYen(i.actualAmount) }}</template>
-                        </td>
-                        <td class="num muted">{{ diff(i.budgetAmount, i.actualAmount) }}</td>
-                      </tr>
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colspan="4">合計</td>
-                        <td class="num">{{ formatYen(row.items.reduce((s, i) => s + i.budgetAmount, 0)) }}</td>
-                        <td class="num">{{ formatYen(itemsActualTotal(row)) }}</td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  </table>
-                  <p v-if="can('executeEntries')" class="items-actions">
-                    <button type="button" class="secondary" :disabled="!itemsChanged(row)" @click="onSaveItems(row)">数量・取引先・執行額を保存</button>
-                    <span v-if="itemsSaved" class="ok">保存しました（申請の金額も明細の合計にそろえました）。</span>
-                  </p>
-                </div>
-                <dl>
-                  <template v-for="d in detailRows(row)" :key="d.label">
-                    <dt>{{ d.label }}</dt>
-                    <dd>
-                      <template v-if="d.isUrl">
-                        <template v-for="(u, n) in splitLinks(d.value)" :key="n">
-                          <a v-if="isLink(u)" :href="u" target="_blank" rel="noopener">{{ u }}</a><span v-else>{{ u }}</span><br>
+          </thead>
+          <tbody>
+            <template v-for="row in shownEntries" :key="row.id">
+              <tr class="clickable" :class="{ done: row.status === 'done' }" @click="toggle(row)">
+                <td class="c-seq">{{ row.seq }}</td>
+                <td class="c-date">{{ dateTime(row.createdAt) }}</td>
+                <td data-label="項目番号">{{ shortenItemNumbers(row.itemNumber) }}</td>
+                <td class="c-name">{{ row.itemName }}</td>
+                <td data-label="数量">{{ row.quantity }}</td>
+                <td class="num c-amount">{{ yen(row.amount) }}</td>
+                <td data-label="形態">{{ methodLabel(row) }}</td>
+                <td data-label="期限・予定日">{{ row.deadline }}</td>
+                <td data-label="申請者">{{ row.applicantName }}<small>（{{ row.department }}/{{ row.inCharge }}）</small></td>
+                <td class="c-status">
+                  <span class="badge" :class="stageOf(row)">{{ STAGE_LABELS[stageOf(row)] }}</span>
+                  <small v-if="row.status === 'done'" class="executed-at">{{ dateTime(row.executedAt) }}</small>
+                </td>
+                <td data-label="証憑" :class="{ 'no-evidence': !hasEvidence(row) }">{{ evidenceStatus(row) }}</td>
+              </tr>
+              <tr v-if="opened === row.id" class="detail">
+                <td colspan="11">
+                  <EvidenceCheck :entry="row" :has-evidence="hasEvidence(row)" @changed="refresh" />
+                  <EvidenceSection v-if="row.kind === 'execution'" :entry="row" @changed="refresh" />
+                  <ShippingNotice
+                    v-if="row.type === '発注' && row.status === 'pending'"
+                    class="shipping-in-row"
+                    :advice="shippingAdvice(siteOf(row), orderAmountOf(row), pendingOrdersOf(entries, siteOf(row), row.id))"
+                    :site="siteOf(row)"
+                  />
+                  <div v-if="row.items.length" class="items">
+                    <strong>予算明細（{{ row.items.length }}件）</strong>
+                    <table class="items-table">
+                      <thead>
+                        <tr><th>項目番号</th><th>明細</th><th>数量</th><th>取引先</th><th class="num">予算額</th><th class="num">執行額</th><th class="num">予算比</th></tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="i in row.items" :key="i.id">
+                          <td class="muted">{{ i.itemNumber }}</td>
+                          <td>{{ i.label }}</td>
+                          <td>
+                            <input v-if="can('executeEntries')" v-model="quantityDrafts[i.id]" class="text-input" autocomplete="off" :aria-label="`${i.label} の数量`">
+                            <template v-else>{{ quantityOf(i) }}</template>
+                            <small v-if="quantityOf(i) !== i.quantity" class="muted was">予算: {{ i.quantity || 'なし' }}</small>
+                          </td>
+                          <td>
+                            <input v-if="can('executeEntries')" v-model="vendorDrafts[i.id]" class="text-input" autocomplete="off" :aria-label="`${i.label} の取引先`">
+                            <template v-else>{{ vendorOf(i) }}</template>
+                            <small v-if="vendorOf(i) !== i.vendor" class="muted was">予算: {{ i.vendor || 'なし' }}</small>
+                          </td>
+                          <td class="num">{{ formatYen(i.budgetAmount) }}</td>
+                          <td class="num">
+                            <input
+                              v-if="can('executeEntries')"
+                              v-model="itemDrafts[i.id]"
+                              type="text"
+                              inputmode="numeric"
+                              autocomplete="off"
+                              placeholder="未入力"
+                              :class="{ invalid: invalidItem(i.id) }"
+                              :aria-invalid="invalidItem(i.id) || undefined"
+                              :aria-label="`${i.label} の執行額`"
+                            >
+                            <template v-else>{{ i.actualAmount == null ? '未入力' : formatYen(i.actualAmount) }}</template>
+                          </td>
+                          <td class="num muted">{{ diff(i.budgetAmount, i.actualAmount) }}</td>
+                        </tr>
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colspan="4">合計</td>
+                          <td class="num">{{ formatYen(row.items.reduce((s, i) => s + i.budgetAmount, 0)) }}</td>
+                          <td class="num">{{ formatYen(itemsActualTotal(row)) }}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                    <p v-if="can('executeEntries')" class="items-actions">
+                      <button type="button" class="secondary" :disabled="!itemsChanged(row)" @click="onSaveItems(row)">数量・取引先・執行額を保存</button>
+                      <span v-if="itemsSaved" class="ok">保存しました（申請の金額も明細の合計にそろえました）。</span>
+                    </p>
+                  </div>
+                  <dl>
+                    <template v-for="d in detailRows(row)" :key="d.label">
+                      <dt>{{ d.label }}</dt>
+                      <dd>
+                        <template v-if="d.isUrl">
+                          <template v-for="(u, n) in splitLinks(d.value)" :key="n">
+                            <a v-if="isLink(u)" :href="u" target="_blank" rel="noopener">{{ u }}</a><span v-else>{{ u }}</span><br>
+                          </template>
                         </template>
-                      </template>
-                      <template v-else>{{ d.value }}</template>
-                    </dd>
-                  </template>
-                  <template v-if="row.remark"><dt>備考</dt><dd>{{ row.remark }}</dd></template>
-                  <template v-if="row.attachmentId">
-                    <dt>{{ row.kind === 'execution' ? '請求書' : '証憑' }}</dt>
-                    <dd><a :href="`/api/entries/${row.id}/attachment`" target="_blank">ファイルを開く</a></dd>
-                  </template>
-                </dl>
-
-                <div v-if="can('executeEntries')" class="exec">
-                  <template v-if="row.status === 'pending'">
-                    <div v-if="row.kind === 'execution' && row.type === '振込'" class="bank-pick">
-                      <label>使用口座
-                        <select v-model="exec.bank"><option v-for="b in TRANSFER_BANKS" :key="b">{{ b }}</option></select>
-                      </label>
-                      <a :href="bankLinks[exec.bank]" target="_blank" rel="noopener" class="bank-link">{{ exec.bank }}のサイトを開く ↗</a>
-                    </div>
-                    <template v-if="row.type === '発注' && !row.items.length">
-                      <label>確定金額（円）<YenInput v-model="exec.amount" /></label>
-                      <label>数量<input v-model="exec.quantity"></label>
+                        <template v-else>{{ d.value }}</template>
+                      </dd>
                     </template>
-                    <button @click="setDone(row, true)">対応済みにする</button>
-                  </template>
-                  <button v-else class="secondary" @click="setDone(row, false)">未対応に戻す</button>
-                  <ul v-if="execErrors.length" class="error"><li v-for="e in execErrors" :key="e">{{ e }}</li></ul>
-                </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
+                    <template v-if="row.remark"><dt>備考</dt><dd>{{ row.remark }}</dd></template>
+                    <template v-if="row.attachmentId">
+                      <dt>{{ row.kind === 'execution' ? '請求書' : '証憑' }}</dt>
+                      <dd><a :href="`/api/entries/${row.id}/attachment`" target="_blank">ファイルを開く</a></dd>
+                    </template>
+                  </dl>
+
+                  <div v-if="can('executeEntries')" class="exec">
+                    <template v-if="row.status === 'pending'">
+                      <div v-if="row.kind === 'execution' && row.type === '振込'" class="bank-pick">
+                        <label>使用口座
+                          <select v-model="exec.bank"><option v-for="b in TRANSFER_BANKS" :key="b">{{ b }}</option></select>
+                        </label>
+                        <a :href="bankLinks[exec.bank]" target="_blank" rel="noopener" class="bank-link">{{ exec.bank }}のサイトを開く ↗</a>
+                      </div>
+                      <template v-if="row.type === '発注' && !row.items.length">
+                        <label>確定金額（円）<YenInput v-model="exec.amount" /></label>
+                        <label>数量<input v-model="exec.quantity"></label>
+                      </template>
+                      <button @click="setDone(row, true)">対応済みにする</button>
+                    </template>
+                    <button v-else class="secondary" @click="setDone(row, false)">未対応に戻す</button>
+                    <ul v-if="execErrors.length" class="error"><li v-for="e in execErrors" :key="e">{{ e }}</li></ul>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </template>
   </section>
 </template>
 
 <style scoped>
+/* 支出・収入の切り替え（表示の切り替えより一段上なので、つなげた大きめのボタンにする） */
+.flow-tabs { display: inline-flex; margin-bottom: .8rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.flow-tabs button { background: var(--surface); color: var(--text); border: none; border-radius: 0; padding: .4rem 1.4rem; font-weight: 600; }
+.flow-tabs button + button { border-left: 1px solid var(--border); }
+.flow-tabs button.active { background: var(--accent-bg); color: var(--accent-text); }
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; }
 .page-head h1 { margin: 0; }
 .items-table { width: auto; min-width: 32rem; margin: .4rem 0; background: var(--surface); }

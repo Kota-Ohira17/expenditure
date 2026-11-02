@@ -79,7 +79,7 @@ async function onSubmit() {
 
     <div v-if="done" class="success">
       <p>記録しました（番号 {{ done }}）。財務局長・管理者が入金を確かめると、確認済みになります。</p>
-      <NuxtLink to="/incomes">収入台帳へ</NuxtLink>
+      <NuxtLink :to="{ path: '/entries', query: { flow: 'income' } }">台帳（収入）へ</NuxtLink>
     </div>
 
     <form v-else @submit.prevent="onSubmit">
@@ -127,7 +127,7 @@ async function onSubmit() {
           <select v-model="form.account" class="fit" required><option value="" disabled>選択</option><option v-for="a in BANK_ACCOUNTS" :key="a">{{ a }}</option></select>
         </label>
         <label>備考<textarea v-model="form.remark" rows="3" /></label>
-        <label>証憑（入金の明細など）<span class="hint">PDF・JPEG・PNG、4MBまで。あとから収入台帳で付けることもできます。</span>
+        <label>証憑（入金の明細など）<span class="hint">PDF・JPEG・PNG、4MBまで。あとから台帳の「収入」で付けることもできます。</span>
           <input type="file" accept=".pdf,image/*" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null">
         </label>
       </fieldset>
