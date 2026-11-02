@@ -143,6 +143,7 @@ function cancelRound() {
         <p v-if="summary">
           支出 <strong>{{ formatYen(summary.total) }}</strong><template v-if="collecting.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.base) }}）</template>・
           収入 <strong>{{ formatYen(summary.income) }}</strong><template v-if="collecting.round.kind === '補正予算'">（もとの予算 {{ formatYen(summary.incomeBase) }}）</template>・
+          収支 <strong :class="{ minus: summary.income - summary.total < 0 }">{{ formatYen(summary.income - summary.total) }}</strong>・
           未提出 {{ summary.draft }} ／ 要修正 {{ summary.returned }} ／ 査定待ち {{ summary.submitted }} ／ 承認済み {{ summary.approved }}
         </p>
         <div v-if="reviewer" class="buttons">
@@ -240,6 +241,7 @@ function cancelRound() {
 </template>
 
 <style scoped>
+.minus { color: var(--danger); }
 .card { max-width: none; margin-bottom: 1.5rem; display: grid; gap: .6rem; }
 .head h2, .card h2 { margin: 0; font-size: 1.1rem; }
 h2 { font-size: 1.1rem; }
