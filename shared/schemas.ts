@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { EVIDENCE_KINDS, INCOME_FILE_KINDS, INCOME_METHODS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
+import type { CashbookKind } from './constants'
+import { BANK_ACCOUNTS, CASH_ACCOUNTS, CASHBOOK_KINDS, EVIDENCE_KINDS, INCOME_FILE_KINDS, INCOME_METHODS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
 
 const required = (label: string) => {
   const message = `${label}を入力してください。`
@@ -148,8 +149,11 @@ export const incomeSchema = z.object({
   receivedOn: date,
   payer: z.string().trim().max(200).default(''),
   method: z.enum(INCOME_METHODS, { error: '受け取り方を選んでください。' }),
+  /** 振込で受け取った口座（振込のときだけ） */
+  account: z.enum(BANK_ACCOUNTS).or(z.literal('')).default(''),
   remark: z.string().trim().max(1000).default(''),
 }).superRefine((v, ctx) => {
+  if (v.method === '振込' && !v.account) ctx.addIssue({ code: 'custom', message: '振込で受け取った口座を選んでください。', path: ['account'] })
   if (v.budgetLineKey) return
   if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '収入の項目を予算から選んでください。', path: ['budgetLineKey'] })
   else if (!v.budgetPath.kan) ctx.addIssue({ code: 'custom', message: '予算にない収入の款を入力してください。', path: ['budgetPath'] })
@@ -164,6 +168,32 @@ export const incomeFileSchema = z.object({
 
 /** 入金を確かめた（done: true）／確認待ちに戻す（false）（財務局長・管理者） */
 export const incomeConfirmSchema = z.object({ done: z.boolean() })
+
+/**
+ * 出納帳に手で書く記録（財務局長・管理者）。
+ * 期首の残高・残高の照合は口座のその日の残高、口座間の移動は移した額（移動元 → 移動先）、
+ * 調整は増えたら正・減ったら負の額（利息・手数料など）。
+ */
+export const cashbookRecordSchema = z.object({
+  kind: z.enum(Object.keys(CASHBOOK_KINDS) as [CashbookKind, ...CashbookKind[]], { error: '記録の種類を選んでください。' }),
+  date,
+  account: z.enum(CASH_ACCOUNTS, { error: '口座を選んでください。' }),
+  toAccount: z.enum(CASH_ACCOUNTS).or(z.literal('')).default(''),
+  amount: z.coerce.number({ error: '金額を数字で入力してください。' }).int('整数で入力してください。'),
+  memo: z.string().trim().max(500).default(''),
+}).superRefine((v, ctx) => {
+  if (v.kind === 'transfer') {
+    if (!v.toAccount) ctx.addIssue({ code: 'custom', message: '移動先の口座を選んでください。', path: ['toAccount'] })
+    else if (v.toAccount === v.account) ctx.addIssue({ code: 'custom', message: '移動元と移動先は別の口座にしてください。', path: ['toAccount'] })
+    if (v.amount <= 0) ctx.addIssue({ code: 'custom', message: '移した金額を入力してください。', path: ['amount'] })
+  }
+  if (v.kind === 'adjust') {
+    if (v.amount === 0) ctx.addIssue({ code: 'custom', message: '調整の金額を入力してください（減ったときは負の数）。', path: ['amount'] })
+    if (!v.memo) ctx.addIssue({ code: 'custom', message: '調整の理由を書いてください（利息・手数料など）。', path: ['memo'] })
+  }
+  if ((v.kind === 'opening' || v.kind === 'check') && v.amount < 0) ctx.addIssue({ code: 'custom', message: '残高は0円以上で入力してください。', path: ['amount'] })
+})
+export type CashbookRecordInput = z.input<typeof cashbookRecordSchema>
 
 export const evidenceUploadSchema = z.object({
   kind: z.enum(EVIDENCE_KINDS, { error: '証憑の種類を選んでください。' }),

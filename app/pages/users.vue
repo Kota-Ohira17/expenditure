@@ -83,6 +83,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   exportSettlement: '決算シートの出力',
   reviewBudget: '予算の集約・査定・確定',
   manageUsers: '委員の登録・権限変更',
+  manageCashbook: '出納帳（残高の照合）',
 }
 const formatDate = (d: string | Date | null) => (d ? new Date(d).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' }) : '未ログイン')
 </script>
