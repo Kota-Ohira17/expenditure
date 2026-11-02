@@ -64,6 +64,8 @@ const refTotal = computed(() => refTotalOf('expense'))
 const refIncomeTotal = computed(() => refTotalOf('income'))
 const refSections = computed(() => BUDGET_FLOWS.map(flow => ({ flow, kans: refKans.value.filter(k => k.flow === flow) })).filter(s => s.kans.length))
 const notCopied = (list: RefItem[]) => list.filter(i => !i.copied).map(i => i.id)
+/** 収入・支出それぞれの、まだコピーしていない参考の明細 */
+const notCopiedOf = (sec: (typeof refSections.value)[number]) => notCopied(sec.kans.flatMap(k => k.list))
 /** はじめは、まだ明細がないときだけ開いておく */
 const refOpen = ref(items.value.length === 0)
 const copy = (ids: number[]) => run(() => $fetch(`/api/budget/teams/${teamId}/copy`, { method: 'POST', body: { ids } }), `${ids.length}件コピーしました。内容を確認してから提出してください。`)
@@ -252,7 +254,15 @@ function addTo(flow: BudgetFlow, kan: string) {
           <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。財務管理部が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
           <p v-else-if="!reference.items.length" class="hint">取り込んだ本予算・決算に、この担当（{{ team.bureau }} ／ {{ team.team }}）の明細はありません。</p>
           <template v-for="sec in refSections" :key="sec.flow">
-          <h3 class="flow-head" :class="sec.flow">{{ FLOW_LABELS[sec.flow] }}の部</h3>
+          <div class="flow-head ref-flow-head" :class="sec.flow">
+            <h3>{{ FLOW_LABELS[sec.flow] }}の部</h3>
+            <button
+              v-if="canAdd && notCopiedOf(sec).length" class="secondary" :disabled="pending"
+              @click="copy(notCopiedOf(sec))"
+            >
+              {{ FLOW_LABELS[sec.flow] }}をすべてコピー（{{ notCopiedOf(sec).length }}件）
+            </button>
+          </div>
           <div v-for="k in sec.kans" :key="k.key" class="kan">
             <div class="kan-head">
               <h3>{{ k.kan || '（款なし）' }}</h3>
@@ -313,6 +323,10 @@ function addTo(flow: BudgetFlow, kan: string) {
 .flow-head { margin: 1.2rem 0 0; padding: .3rem .6rem; border-left: 4px solid var(--accent); font-size: 1rem; }
 .flow-head.income { border-left-color: var(--done); }
 .flow-head .muted { font-weight: 400; font-size: .85rem; margin-left: .4rem; }
+/* 参考の収入の部・支出の部の見出し（右に「〜をすべてコピー」） */
+.ref-flow-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.ref-flow-head h3 { margin: 0; font-size: 1rem; }
+.ref-flow-head button { font-size: .85rem; padding: .25rem .8rem; }
 /* 昨年の本予算・決算（参考）：本体の明細と見分けられるよう、点線の枠で囲む */
 .reference { margin: 1rem 0 1.6rem; border: 1.5px dashed var(--border); border-radius: 12px; background: var(--panel); }
 .ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; cursor: pointer; user-select: none; }
