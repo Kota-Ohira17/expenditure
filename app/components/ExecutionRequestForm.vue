@@ -24,8 +24,8 @@ const form = reactive({
   budgetPath: { kan: '', kou: '', moku: '', setsu: '' },
   itemName: '',
   budgetCommitteeApproved: false,
-  /** 金額が予算額と違う明細があるとき、予算の変更も申請するか（'yes' / 'no'。選ぶまで空） */
-  requestBudgetChange: '' as '' | 'yes' | 'no',
+  /** 金額が予算額と違う明細があるとき、予算の変更も申請するか（任意。初めはしない） */
+  requestBudgetChange: false,
   budgetChangeReason: '',
   preExecutionReason: '',
   remark: '',
@@ -112,7 +112,7 @@ const diffYen = computed(() => {
   const d = (budgetSummary.value?.actual ?? 0) - (budgetSummary.value?.budget ?? 0)
   return `${d > 0 ? '+' : d < 0 ? '-' : '±'}¥${Math.abs(d).toLocaleString('ja-JP')}`
 })
-/** 金額が予算額と違う明細（予算の変更を申請するかを聞く） */
+/** 金額が予算額と違う明細（「予算の変更も申請する」を出す） */
 const changedLines = computed(() => {
   if (!hasItems.value) return []
   const byKey = new Map(budgetLines.value.map(l => [l.key, l]))
@@ -139,8 +139,8 @@ function buildPayload() {
     budgetPath: form.budgetPath,
     itemName: form.itemName,
     budgetCommitteeApproved: budgetSummary.value?.change === LARGE_INCREASE && form.budgetCommitteeApproved,
-    requestBudgetChange: changedLines.value.length ? form.requestBudgetChange === 'yes' : null,
-    budgetChangeReason: changedLines.value.length && form.requestBudgetChange === 'yes' ? form.budgetChangeReason : '',
+    requestBudgetChange: changedLines.value.length > 0 && form.requestBudgetChange,
+    budgetChangeReason: changedLines.value.length && form.requestBudgetChange ? form.budgetChangeReason : '',
     remark: form.remark,
     preExecution: !!props.pre,
     preExecutionReason: props.pre ? form.preExecutionReason : '',
@@ -381,18 +381,16 @@ async function onSubmit() {
           <p v-if="budgetSummary.change === LARGE_INCREASE" class="hint">1万円以上の増額は、役員会の承認を得てから申請してください。</p>
 
           <div v-if="changedLines.length" class="change-request">
-            <span class="block-label">予算の変更も申請しますか？<span class="req">*</span></span>
-            <p class="hint">次の明細は、金額が予算額と違います。「はい」にすると、この執行依頼と一緒に、予算の金額を執行額に直す予算の変更を申請します（財務管理部が承認すると予算に反映されます）。</p>
+            <span class="block-label">予算の変更（任意）</span>
+            <p class="hint">次の明細は、金額が予算額と違います。</p>
             <ul class="changed-lines">
               <li v-for="c in changedLines" :key="c.line.key">
                 <span class="muted">{{ c.line.itemNumber }}</span> {{ c.line.label }}：{{ formatYen(c.line.budgetAmount) }} → {{ formatYen(c.actual) }}
               </li>
             </ul>
-            <div class="choices">
-              <label class="check"><input v-model="form.requestBudgetChange" type="radio" value="yes" name="request-budget-change" required> はい（予算の変更も申請する）</label>
-              <label class="check"><input v-model="form.requestBudgetChange" type="radio" value="no" name="request-budget-change"> いいえ（執行依頼だけ）</label>
-            </div>
-            <label v-if="form.requestBudgetChange === 'yes'">変更の理由<span class="hint">書かなければ、執行依頼の番号と金額を理由にします。</span>
+            <label class="check"><input v-model="form.requestBudgetChange" type="checkbox"> 予算の変更も申請する</label>
+            <p class="hint">チェックすると、この執行依頼と一緒に、予算の金額を執行額に直す予算の変更を申請します（財務管理部が承認すると予算に反映されます）。同じ項目をこのあとも執行するときなどに使ってください。ふつうは申請しなくてかまいません（予算との差は補正予算・決算で見ます）。</p>
+            <label v-if="form.requestBudgetChange">変更の理由<span class="hint">書かなければ、執行依頼の番号と金額を理由にします。</span>
               <textarea v-model="form.budgetChangeReason" rows="2" />
             </label>
           </div>
@@ -403,7 +401,7 @@ async function onSubmit() {
           <label class="check"><input v-model="confirmed" type="checkbox"> はい</label>
         </div>
         <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>
-        <button type="submit" :disabled="!confirmed || pending || needsApproval || (changedLines.length > 0 && !form.requestBudgetChange)">{{ pending ? '送信中…' : '送信' }}</button>
+        <button type="submit" :disabled="!confirmed || pending || needsApproval">{{ pending ? '送信中…' : '送信' }}</button>
       </template>
     </form>
   </section>
@@ -412,7 +410,6 @@ async function onSubmit() {
 <style scoped>
 .change-request { display: grid; gap: .4rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px dashed var(--border); }
 .changed-lines { margin: 0; padding-left: 1.2rem; font-size: .88rem; }
-.choices { display: flex; flex-wrap: wrap; gap: 1rem; }
 .intro { border-left: 4px solid var(--accent); padding: .5rem .9rem; font-size: .9rem; background: var(--sub); border-radius: 0 6px 6px 0; }
 .intro p { margin: .3rem 0; }
 .intro ul { margin: .2rem 0; padding-left: 1.4rem; }

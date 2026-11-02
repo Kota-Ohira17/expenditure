@@ -29,11 +29,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '1万円以上の増額は、役員会の承認を得てから申請してください（承認のチェックが必要です）。' })
   }
 
-  // 金額が予算額と違う明細があるときは、予算の変更も申請するか（はい・いいえ）を選んでもらう
+  // 金額が予算額と違う明細（「予算の変更も申請する」にチェックがあれば、あとで申請する）
   const changed = changedItems(lines, itemAmounts)
-  if (changed.length && requestBudgetChange == null) {
-    throw createError({ statusCode: 400, message: '金額が予算額と違う明細があります。予算の変更も申請するかを選んでください。' })
-  }
 
   const attachmentId = file
     ? await saveAttachment(file, `${inCharge}_${itemName}_請求書`)
