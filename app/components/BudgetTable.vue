@@ -14,6 +14,8 @@ const props = defineProps<{
   selected?: string[]
   /** 枠の高さを固定する（タブを切り替えても大きさが変わらない）。中身は枠の中でスクロールする */
   fixedHeight?: boolean
+  /** 見出しでまとめて選ばせない（1件だけ選ぶとき） */
+  noGroupPick?: boolean
 }>()
 const emit = defineEmits<{
   toggle: [key: string]
@@ -29,7 +31,7 @@ const rows = computed(() => table.value.rows)
 /** 見出しの行の選択状態（款から下の見出しは、その下の明細をすべてまとめて選べる） */
 function groupState(row: Row) {
   const keys = row.path ? table.value.descendants.get(row.path) : undefined
-  if (!selectable.value || !keys?.length || !GROUP_LEVELS.includes(row.level)) return undefined
+  if (!selectable.value || props.noGroupPick || !keys?.length || !GROUP_LEVELS.includes(row.level)) return undefined
   const on = keys.filter(k => props.selected?.includes(k)).length
   return { keys, all: on === keys.length, some: on > 0 && on < keys.length }
 }

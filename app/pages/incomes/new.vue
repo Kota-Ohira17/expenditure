@@ -61,7 +61,11 @@ watch(useManual, (m) => {
   }
 })
 
-const lineLabel = (l: (typeof lines.value)[number]) => `${l.itemNumber}　${l.bureau}／${l.team}　${l.kan} ／ ${l.label}（予算 ${formatYen(l.budgetAmount)}）`
+/** 予算の表（BudgetPicker）は key の配列で選ぶので、1件の key とつなぐ */
+const pickedKeys = computed({
+  get: () => (form.budgetLineKey ? [form.budgetLineKey] : []),
+  set: (keys: string[]) => { form.budgetLineKey = keys[0] ?? '' },
+})
 
 async function onSubmit() {
   const result = await submit({
@@ -107,12 +111,10 @@ async function onSubmit() {
               <input v-model="form.itemNumber" placeholder="in01-01-01" required @input="numberEdited = true">
             </label>
           </template>
-          <label v-else>収入の予算
-            <select v-model="form.budgetLineKey" required>
-              <option value="" disabled>選択</option>
-              <option v-for="l in lines" :key="l.key" :value="l.key">{{ lineLabel(l) }}</option>
-            </select>
-          </label>
+          <template v-else>
+            <p class="hint">収入の予算の表から、入ってきたお金に当たる明細を1つ選んでください。</p>
+            <BudgetPicker v-model="pickedKeys" flow="income" single :preferred-bureau="form.department" />
+          </template>
           <button v-if="lines.length" type="button" class="link" @click="manual = !manual">{{ manual ? '予算から選ぶ' : '予算にない収入を手入力する' }}</button>
           <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" required @input="nameEdited = true"></label>
         </div>
