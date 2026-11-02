@@ -3,6 +3,7 @@ import { bureauNameOf } from '#shared/constants'
 
 /**
  * 予算明細をスプレッドシートと同じ形の表から複数選ぶ。v-model は明細の key の配列。
+ * flow="income" なら収入の明細を出す（収入の記録）。single なら1件だけ選ぶ（別の明細を押すと入れ替わる。見出しでまとめては選べない）。
  * v-model:amounts / quantities / vendors は明細ごとの実際の執行額・数量・取引先。
  * ここでは選んだときに予算の値を入れておくだけで、直すのは執行形態ごとの入力欄（ItemDetailsInputs）。
  */
@@ -11,8 +12,8 @@ const amounts = defineModel<Record<string, number | ''>>('amounts', { default: (
 const quantities = defineModel<Record<string, string>>('quantities', { default: () => ({}) })
 const vendors = defineModel<Record<string, string>>('vendors', { default: () => ({}) })
 /** 開く局（フォームで局を選んだときの略称。例: ZAI）。変わるたびにその局のタブへ移動する */
-const props = defineProps<{ preferredBureau?: string }>()
-const { data: lines } = await useBudgetLines()
+const props = defineProps<{ preferredBureau?: string, flow?: 'income' | 'expense', single?: boolean }>()
+const { data: lines } = await (props.flow === 'income' ? useIncomeLines() : useBudgetLines())
 
 const query = ref('')
 const bureaus = computed(() => [...new Set(lines.value.map(l => l.bureau).filter(Boolean))])
@@ -116,12 +117,13 @@ const tabs = computed(() => {
 function toggle(key: string) {
   current.value = current.value.includes(key)
     ? current.value.filter(k => k !== key)
-    : [...current.value, key]
+    : props.single ? [key] : [...current.value, key]
   selected.value = current.value
   syncAmounts()
 }
 
 function toggleMany(keys: string[], on: boolean) {
+  if (props.single && on) return
   current.value = on
     ? [...current.value, ...keys.filter(k => !current.value.includes(k))]
     : current.value.filter(k => !keys.includes(k))
@@ -137,7 +139,7 @@ function toggleMany(keys: string[], on: boolean) {
         <strong>選択中 {{ selectedLines.length }}件</strong>
         <span>予算額 {{ formatYen(selectedTotal) }}</span>
       </div>
-      <p class="hint">実際の金額・数量・取引先は、このあとの入力欄で明細ごとに入力します。</p>
+      <p v-if="!single" class="hint">実際の金額・数量・取引先は、このあとの入力欄で明細ごとに入力します。</p>
       <section v-for="g in selectedByKan" :key="g.key" class="kan-group">
         <header class="kan-head">
           <span class="kan-title">
@@ -163,7 +165,7 @@ function toggleMany(keys: string[], on: boolean) {
       </section>
     </div>
 
-    <label class="search">絞り込み<input v-model="query" type="search" placeholder="例: インク / out-03-02 / ASKUL"></label>
+    <label class="search">絞り込み<input v-model="query" type="search" :placeholder="flow === 'income' ? '例: 協賛 / in01-01' : '例: インク / out-03-02 / ASKUL'"></label>
 
     <div class="bureau-tabs" role="tablist" aria-label="局">
       <button
@@ -194,9 +196,10 @@ function toggleMany(keys: string[], on: boolean) {
       <span class="legend-item"><span class="leaf-swatch" />明細（金額のある行）</span>
     </div>
 
-    <BudgetTable v-if="filtered.length" :lines="filtered" :selected="current" fixed-height @toggle="toggle" @toggle-many="toggleMany" />
+    <BudgetTable v-if="filtered.length" :lines="filtered" :selected="current" fixed-height :no-group-pick="single" @toggle="toggle" @toggle-many="toggleMany" />
     <p v-else class="hint">{{ query ? 'この局には該当する明細がありません。ほかの局のタブ（件数つき）を見てください。' : '該当する明細がありません。' }}</p>
-    <p class="hint">
+    <p v-if="single" class="hint">明細の行をクリックすると選べます（1件だけ。別の行を押すと入れ替わります）。</p>
+    <p v-else class="hint">
       明細の行をクリックすると1件ずつ選べます。款・項・目・節の見出しのチェックボックスは、その下の明細をすべてまとめて選択・解除します
       （横の数字が対象の件数。マウスを乗せると対象の明細が色付きで表示されます）。
     </p>
