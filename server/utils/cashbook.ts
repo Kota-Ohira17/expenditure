@@ -46,7 +46,7 @@ export interface CashbookCheck {
 const ORDER: Record<CashbookRow['source'], number> = { opening: 0, income: 1, transfer: 2, adjust: 2, execution: 3, check: 4 }
 
 /** 執行の金額。申請の金額、なければ明細ごとの執行額の合計（1つでも分からなければ null） */
-function executedAmount(entry: Awaited<ReturnType<typeof withItems>>[number]) {
+export function executedAmount(entry: Awaited<ReturnType<typeof withItems>>[number]) {
   if (entry.amount != null) return entry.amount
   const amounts = entry.items.map(i => actualAmountOf(i, entry))
   return amounts.length && amounts.every(a => a != null) ? amounts.reduce((s, a) => s + a!, 0) : null

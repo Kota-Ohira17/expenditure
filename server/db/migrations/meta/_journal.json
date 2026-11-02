@@ -218,6 +218,13 @@
       "when": 1793610201337,
       "tag": "0030_cashbook",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1793638749942,
+      "tag": "0031_manual_journals",
+      "breakpoints": true
     }
   ]
 }

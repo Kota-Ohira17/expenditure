@@ -1,4 +1,5 @@
 import { blob, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNTS, PAYMENT_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
 
@@ -221,6 +222,23 @@ export const cashbookRecords = sqliteTable('cashbook_records', {
 })
 
 export type CashbookRecord = typeof cashbookRecords.$inferSelect
+
+/**
+ * 手で入れた仕訳（財務局長・管理者）。執行・収入・出納帳の記録からの仕訳は持たず、帳簿を開くたびに作る。
+ * lines は [{ account, kind, debit, credit }]（借方の合計＝貸方の合計）。
+ */
+export const manualJournals = sqliteTable('manual_journals', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** 仕訳の日付（YYYY-MM-DD） */
+  date: text('date').notNull(),
+  /** 摘要 */
+  memo: text('memo').notNull(),
+  lines: text('lines', { mode: 'json' }).$type<{ account: string, kind: AccountKind, debit: number, credit: number }[]>().notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type ManualJournal = typeof manualJournals.$inferSelect
 
 /**
  * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。

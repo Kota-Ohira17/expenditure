@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { CashbookKind } from './constants'
-import { BANK_ACCOUNTS, CASH_ACCOUNTS, CASHBOOK_KINDS, EVIDENCE_KINDS, INCOME_FILE_KINDS, INCOME_METHODS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
+import { ACCOUNT_KINDS, BANK_ACCOUNTS, CASH_ACCOUNTS, CASHBOOK_KINDS, EVIDENCE_KINDS, INCOME_FILE_KINDS, INCOME_METHODS, PAPER_RECEIPT, REFUND_TIMINGS, TRANSFER_BANKS } from './constants'
 
 const required = (label: string) => {
   const message = `${label}を入力してください。`
@@ -202,6 +202,32 @@ export const cashbookRecordSchema = z.object({
   if ((v.kind === 'opening' || v.kind === 'check') && v.amount < 0) ctx.addIssue({ code: 'custom', message: '残高は0円以上で入力してください。', path: ['amount'] })
 })
 export type CashbookRecordInput = z.input<typeof cashbookRecordSchema>
+
+/** 手で入れる仕訳の1行（借方か貸方のどちらかに金額） */
+const journalLine = z.object({
+  account: required('勘定科目').pipe(z.string().max(100)),
+  kind: z.enum(ACCOUNT_KINDS, { error: '科目の区分を選んでください。' }),
+  debit: z.coerce.number({ error: '借方の金額を数字で入力してください。' }).int('整数で入力してください。').min(0).default(0),
+  credit: z.coerce.number({ error: '貸方の金額を数字で入力してください。' }).int('整数で入力してください。').min(0).default(0),
+})
+
+/** 手で入れる仕訳（財務局長・管理者）。借方の合計と貸方の合計が同じで、0円でないこと */
+export const manualJournalSchema = z.object({
+  date,
+  memo: required('摘要').pipe(z.string().max(500)),
+  lines: z.array(journalLine).min(2, '借方と貸方の行を入れてください。').max(50),
+}).superRefine((v, ctx) => {
+  const debit = v.lines.reduce((s, l) => s + l.debit, 0)
+  const credit = v.lines.reduce((s, l) => s + l.credit, 0)
+  if (v.lines.some(l => (l.debit > 0) === (l.credit > 0))) ctx.addIssue({ code: 'custom', message: 'それぞれの行には、借方か貸方のどちらか一方だけに金額を入れてください。', path: ['lines'] })
+  else if (debit !== credit) ctx.addIssue({ code: 'custom', message: `借方の合計（${debit.toLocaleString('ja-JP')}円）と貸方の合計（${credit.toLocaleString('ja-JP')}円）が合っていません。`, path: ['lines'] })
+  const kinds = new Map<string, string>()
+  for (const l of v.lines) {
+    if (kinds.has(l.account) && kinds.get(l.account) !== l.kind) ctx.addIssue({ code: 'custom', message: `「${l.account}」の区分が行によって違います。`, path: ['lines'] })
+    kinds.set(l.account, l.kind)
+  }
+})
+export type ManualJournalInput = z.input<typeof manualJournalSchema>
 
 export const evidenceUploadSchema = z.object({
   kind: z.enum(EVIDENCE_KINDS, { error: '証憑の種類を選んでください。' }),

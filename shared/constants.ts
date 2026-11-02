@@ -103,6 +103,12 @@ export const CASH_ACCOUNTS = ['SMBC', 'ゆうちょ', 'MUFG', '現金'] as const
 export type CashAccount = (typeof CASH_ACCOUNTS)[number]
 /** 収入を振込で受け取る口座 */
 export const BANK_ACCOUNTS = ['SMBC', 'ゆうちょ', 'MUFG'] as const
+/** 複式簿記の勘定科目の区分。資産・支出は借方、負債・純資産・収入は貸方に残高が出る */
+export const ACCOUNT_KINDS = ['資産', '負債', '純資産', '収入', '支出'] as const
+export type AccountKind = (typeof ACCOUNT_KINDS)[number]
+/** 口座の勘定科目名（出納帳の口座 → 帳簿の科目） */
+export const CASH_ACCOUNT_TITLES: Record<CashAccount, string> = { SMBC: '普通預金（SMBC）', ゆうちょ: '普通預金（ゆうちょ）', MUFG: '普通預金（MUFG）', 現金: '現金' }
+
 /** 出納帳に手で書く記録（期首の残高・口座間の移動・調整・残高の照合） */
 export const CASHBOOK_KINDS = { opening: '期首の残高', transfer: '口座間の移動', adjust: '調整', check: '残高の照合' } as const
 export type CashbookKind = keyof typeof CASHBOOK_KINDS
