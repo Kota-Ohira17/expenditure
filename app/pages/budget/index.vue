@@ -157,7 +157,7 @@ const filteredIncome = computed(() => {
 .total small { color: var(--muted); }
 .minus, .total.balance.minus strong { color: var(--danger); }
 .table-wrap { overflow-x: auto; }
-.compare-table { border-collapse: collapse; width: 100%; max-width: 40rem; background: var(--surface); }
+.compare-table { border-collapse: collapse; width: 100%; background: var(--surface); }
 .compare-table th, .compare-table td { padding: .4rem .6rem; border-bottom: 1px solid var(--border); text-align: left; font-size: .9rem; }
 .compare-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .compare-table tfoot th { border-top: 2px solid var(--border); }
