@@ -1,15 +1,15 @@
 /**
  * 左のメニューとホームのカードに出すページの一覧（権限に応じて出し分ける）。
- * group ごとに枠を分けて並べる（執行：執行依頼・予算前執行 ／ 収入：収入の記録 ／ 台帳：台帳（支出・収入）・出納帳・帳簿 ／ 予算：予算・集約・査定・予算の変更 ／ 管理：ユーザー）。
+ * group ごとに枠を分けて並べる（依頼・記録：執行依頼・予算前執行・収入の記録 ／ 台帳：台帳（支出・収入）・出納帳・帳簿 ／ 予算：予算・集約・査定・予算の変更 ／ 管理：ユーザー）。
  * matches は、そのメニューを選ばれた色にする下の画面（例：担当の画面は「集約」）。
  */
 export function useMenu() {
   const { can } = usePermissions()
   return computed(() => [
     { to: '/', label: 'ホーム', icon: 'home' as const, home: false, group: '' },
-    { to: '/requests/new', label: '執行依頼', icon: 'send' as const, home: true, group: '執行' },
-    { to: '/requests/pre', label: '予算前執行', icon: 'fast-forward' as const, home: true, group: '執行' },
-    { to: '/incomes/new', label: '収入の記録', icon: 'plus' as const, home: true, group: '収入' },
+    { to: '/requests/new', label: '執行依頼', icon: 'send' as const, home: true, group: '依頼・記録' },
+    { to: '/requests/pre', label: '予算前執行', icon: 'fast-forward' as const, home: true, group: '依頼・記録' },
+    { to: '/incomes/new', label: '収入の記録', icon: 'plus' as const, home: true, group: '依頼・記録' },
     { to: '/entries', label: '台帳', icon: 'list' as const, home: true, group: '台帳' },
     ...(can('manageCashbook') ? [{ to: '/cashbook', label: '出納帳', icon: 'book' as const, home: true, group: '台帳' }] : []),
     ...(can('manageCashbook') ? [{ to: '/ledger', label: '帳簿', icon: 'book-open' as const, home: true, group: '台帳' }] : []),

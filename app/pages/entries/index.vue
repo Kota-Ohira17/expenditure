@@ -222,10 +222,14 @@ async function setDone(row: Row, done: boolean) {
       <SettlementExport v-if="can('exportSettlement')" />
     </div>
 
-    <nav class="flow-tabs" aria-label="支出と収入の切り替え">
-      <button type="button" :class="{ active: flow === 'expense' }" @click="flow = 'expense'">支出</button>
-      <button type="button" :class="{ active: flow === 'income' }" @click="flow = 'income'">収入</button>
-    </nav>
+    <div class="flow-bar">
+      <nav class="flow-tabs" aria-label="支出と収入の切り替え">
+        <button type="button" :class="{ active: flow === 'expense' }" @click="flow = 'expense'">支出</button>
+        <button type="button" :class="{ active: flow === 'income' }" @click="flow = 'income'">収入</button>
+      </nav>
+      <NuxtLink v-if="flow === 'income'" class="button secondary" to="/incomes/new">収入の記録</NuxtLink>
+      <NuxtLink v-else class="button secondary" to="/requests/new">執行依頼</NuxtLink>
+    </div>
 
     <IncomeLedger v-if="flow === 'income'" />
     <template v-else>
@@ -409,7 +413,9 @@ async function setDone(row: Row, done: boolean) {
 
 <style scoped>
 /* 支出・収入の切り替え（表示の切り替えより一段上なので、つなげた大きめのボタンにする） */
-.flow-tabs { display: inline-flex; margin-bottom: .8rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+/* 切り替えの右に、その種類の新しい記録を出す画面へのボタン */
+.flow-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; margin-bottom: .8rem; }
+.flow-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .flow-tabs button { background: var(--surface); color: var(--text); border: none; border-radius: 0; padding: .4rem 1.4rem; font-weight: 600; }
 .flow-tabs button + button { border-left: 1px solid var(--border); }
 .flow-tabs button.active { background: var(--accent-bg); color: var(--accent-text); }
