@@ -10,7 +10,7 @@ import type { BudgetKind } from '../../utils/budget'
 export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'reviewBudget')
   const db = useDb()
-  if ((await db.query.budgetRounds.findFirst()) || (await db.query.mainBudgetItems.findFirst())) {
+  if ((await db.query.budgetRounds.findFirst()) || (await db.query.mainBudgetItems.findFirst()) || (await db.query.mainIncomeItems.findFirst())) {
     throw createError({ statusCode: 409, message: '予算はもう入っています。これからの予算は「予算の集約」で作ってください。' })
   }
   const parts = (await readMultipartFormData(event)) ?? []
@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
       deleted: false, status: 'approved' as const, sortOrder: i, createdAt: now, createdBy: user.email,
     }
   })
-  for (let i = 0; i < rows.length; i += 100) await db.insert(schema.mainBudgetItems).values(rows.slice(i, i + 100))
+  for (const insert of insertsOf(rows, mainTableOf)) await insert
   await rebuildCurrentBudget()
   return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0), budgetKind }
 })

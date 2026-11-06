@@ -388,6 +388,10 @@ const budgetItemColumns = () => ({
 export const mainBudgetItems = sqliteTable('main_budget_items', budgetItemColumns())
 /** ⑦補正予算項目DB（①と同じ形。補正予算の集約で、①の今の値を写してから行を足していく） */
 export const revisedBudgetItems = sqliteTable('revised_budget_items', budgetItemColumns())
+/** ⑪収入の本予算項目DB（①と同じ列。項目番号が in から始まる行） */
+export const mainIncomeItems = sqliteTable('main_income_items', budgetItemColumns())
+/** ⑫収入の補正予算項目DB（⑦と同じ列。項目番号が in から始まる行） */
+export const revisedIncomeItems = sqliteTable('revised_income_items', budgetItemColumns())
 export type BudgetItemRow = typeof mainBudgetItems.$inferSelect
 
 /**

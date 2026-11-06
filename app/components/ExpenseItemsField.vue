@@ -18,8 +18,6 @@ const props = defineProps<{
   bureau: string
   team: string
   itemNameLabel: string
-  /** 予算表で最初に開く局（フォームで選んだ局の略称） */
-  preferredBureau?: string
 }>()
 
 const { data: lines } = await useBudgetLines()
@@ -71,6 +69,8 @@ watch(useManual, (m) => {
   <div class="items">
     <template v-if="useManual">
       <p v-if="!hasBudget" class="hint">予算がまだ取り込まれていないので、項目番号を手入力してください。</p>
+      <!-- 明細を選ばないときだけ必要な入力（局・担当） -->
+      <slot name="manual" />
       <div class="path">
         <label><span>款<span class="req">*</span></span><input v-model="path.kan" required></label>
         <label>項<input v-model="path.kou"></label>
@@ -88,7 +88,6 @@ watch(useManual, (m) => {
       v-model:amounts="amounts"
       v-model:quantities="quantities"
       v-model:vendors="vendors"
-      :preferred-bureau="preferredBureau"
     />
 
     <button v-if="hasBudget" type="button" class="link" @click="manual = !manual">

@@ -11,11 +11,10 @@ export default defineEventHandler(async (event) => {
     const same = await db.query.budgetTeams.findFirst({ where: and(eq(schema.budgetTeams.roundId, round.id), eq(schema.budgetTeams.bureau, team.bureau), eq(schema.budgetTeams.team, name)) })
     if (same) throw createError({ statusCode: 409, message: 'その局に、同じ名前の担当がもうあります。' })
   }
-  const table = tableOf(round)
   await db.batch([
     db.update(schema.budgetTeams).set({ team: name, nameJa }).where(eq(schema.budgetTeams.id, team.id)),
-    db.update(table).set({ team: name })
-      .where(and(eq(table.roundId, round.id), eq(table.bureau, team.bureau), eq(table.team, team.team))),
+    ...tablesOf(round).map(t => db.update(t).set({ team: name })
+      .where(and(eq(t.roundId, round.id), eq(t.bureau, team.bureau), eq(t.team, team.team)))),
     db.update(schema.users).set({ budgetTeam: name })
       .where(and(eq(schema.users.budgetBureau, team.bureau), eq(schema.users.budgetTeam, team.team))),
   ])

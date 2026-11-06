@@ -86,9 +86,9 @@ export async function applyChange(change: BudgetChangeRequest, user: SessionUser
     }
   }
   await db.batch([
-    db.insert(schema.mainBudgetItems).values(values),
+    db.insert(mainTableOf(values.itemNumber)).values(values),
     // 補正予算の集約中は⑦にも足す（査定の状態は変えない）
-    ...(revising ? [db.insert(schema.revisedBudgetItems).values({ ...values, id: newId(), roundId: revising.id, status: 'draft' })] : []),
+    ...(revising ? [db.insert(revisedTableOf(values.itemNumber)).values({ ...values, id: newId(), roundId: revising.id, status: 'draft' })] : []),
     db.update(schema.budgetChangeRequests).set({ status: 'approved', itemId, itemNumber, reviewComment: comment, reviewedAt: now, reviewedBy: user.email })
       .where(eq(schema.budgetChangeRequests.id, change.id)),
   ] as const)

@@ -54,9 +54,6 @@ const confirmed = ref(false)
 const done = ref<string>()
 const changeResult = ref<BudgetChangeResult>(null)
 
-useBureauFromItems(toRef(form, 'budgetLineKeys'), toRef(form, 'department'))
-/** 予算の表で開く局。自分で局を選んだときだけ変える（明細から局が自動で入ったときは表を動かさない） */
-const tabBureau = ref('')
 const onAmountInput = useTotalFromItems(toRef(form, 'itemAmounts'), toRef(form, 'amount'))
 
 const { data: budgetLines } = useBudgetLines()
@@ -91,8 +88,7 @@ watch([methodGroup, () => form.site, () => form.purchase, () => form.budgetLineK
   form.itemVendors = next
 })
 
-// 表から推測できる項目（担当名・購入先・通販サイト）は、選んだ明細の予算の値から初期値を入れておく
-useAutoFill(toRef(form, 'inCharge'), useTeamOfItems(toRef(form, 'budgetLineKeys')))
+// 表から推測できる項目（購入先・通販サイト）は、選んだ明細の予算の値から初期値を入れておく
 /** 選んだ明細の、予算の表にある取引先（重複なし） */
 const budgetVendors = computed(() => {
   const byKey = new Map(budgetLines.value.map(l => [l.key, l]))
@@ -207,8 +203,8 @@ async function onSubmit() {
       <fieldset>
         <legend>{{ pre ? '予算前執行依頼フォーム' : '予算執行依頼フォーム' }}</legend>
         <label><span>申請者氏名<span class="req">*</span></span><input v-model="form.applicantName" class="w-m" placeholder="例：こまばたろう" required></label>
-        <div class="row">
-          <BureauField v-model="form.department" :all="pre" @update:model-value="tabBureau = $event" />
+        <div v-if="pre" class="row">
+          <BureauField v-model="form.department" all />
           <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
         </div>
 
@@ -233,9 +229,15 @@ async function onSubmit() {
             v-model:path="form.budgetPath"
             :bureau="form.department"
             :team="form.inCharge"
-          :preferred-bureau="tabBureau"
             item-name-label="支出項目名"
-          />
+          >
+            <template #manual>
+              <div class="row">
+                <BureauField v-model="form.department" />
+                <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
+              </div>
+            </template>
+          </ExpenseItemsField>
           <p class="hint">支出項目名は、どの項目に対応するかが分かれば正式名称でなくても大丈夫です。</p>
         </div>
 

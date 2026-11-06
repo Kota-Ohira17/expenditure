@@ -10,7 +10,8 @@ import type { BudgetKind, ParsedBudgetLine, ParsedSheetRow } from './budget'
 import type { SessionUser } from './auth'
 
 /**
- * 予算の集約（本予算・補正予算）と、①予算項目DB・⑤査定DB・⑦補正予算項目DB の読み書き。
+ * 予算の集約（本予算・補正予算）と、①予算項目DB・⑤査定DB・⑦補正予算項目DB・⑪⑫収入の予算項目DB の読み書き。
+ * 収入の行は⑪（本予算）⑫（補正予算）に入れる。読むときは支出と合わせて扱うので、下の説明の①⑦は⑪⑫も含む。
  *
  * - ①⑦の行は書き換えず、直すたびに1行足す。項目番号ごとにいちばん新しい行が今の値（削除も行で表す）。
  * - 本予算の集約：①に案の行を足していく → 査定・折衝（⑤）→ 確定すると、その集約の行が承認済みになり、ほかの項目は削除の行で消す。
@@ -21,12 +22,31 @@ import type { SessionUser } from './auth'
 
 const CHUNK = 100
 
-/** ランダムな id（①②⑤⑦の行） */
+/** ランダムな id（①②⑤⑦⑪⑫の行） */
 export const newId = () => crypto.randomUUID().replaceAll('-', '')
 
-/** 集約の種類で、行を書く表（本予算は①、補正予算は⑦） */
-export const tableOf = (round: Pick<BudgetRound, 'kind'>) => (round.kind === '補正予算' ? schema.revisedBudgetItems : schema.mainBudgetItems)
-type ItemTable = ReturnType<typeof tableOf>
+/** 行を書く表。本予算は①（収入は⑪）、補正予算は⑦（収入は⑫）。収入か支出かは項目番号で決まる */
+export const mainTableOf = (itemNumber: string) => (flowOf(itemNumber) === 'income' ? schema.mainIncomeItems : schema.mainBudgetItems)
+export const revisedTableOf = (itemNumber: string) => (flowOf(itemNumber) === 'income' ? schema.revisedIncomeItems : schema.revisedBudgetItems)
+export const tableOf = (round: Pick<BudgetRound, 'kind'>, itemNumber: string) => (round.kind === '補正予算' ? revisedTableOf(itemNumber) : mainTableOf(itemNumber))
+type ItemTable = ReturnType<typeof mainTableOf> | ReturnType<typeof revisedTableOf>
+/** 読むときは、支出と収入の両方の表を見る */
+export const mainTables = (): ItemTable[] => [schema.mainBudgetItems, schema.mainIncomeItems]
+export const revisedTables = (): ItemTable[] => [schema.revisedBudgetItems, schema.revisedIncomeItems]
+export const tablesOf = (round: Pick<BudgetRound, 'kind'>) => (round.kind === '補正予算' ? revisedTables() : mainTables())
+
+type ItemInsert = typeof schema.mainBudgetItems.$inferInsert
+/** 行を収入と支出の表に分けて、足す文を作る */
+export function insertsOf(rows: ItemInsert[], tableFor: (itemNumber: string) => ItemTable) {
+  return [...Map.groupBy(rows, r => tableFor(r.itemNumber))].flatMap(([table, list]) =>
+    Array.from({ length: Math.ceil(list.length / CHUNK) }, (_, i) => useDb().insert(table).values(list.slice(i * CHUNK, (i + 1) * CHUNK))))
+}
+/** 行を収入と支出の表に分けて、承認済みにする文を作る */
+function approvalsOf(rows: BudgetItemRow[], tableFor: (itemNumber: string) => ItemTable) {
+  return [...Map.groupBy(rows, r => tableFor(r.itemNumber))].flatMap(([table, list]) =>
+    Array.from({ length: Math.ceil(list.length / CHUNK) }, (_, i) =>
+      useDb().update(table).set({ status: 'approved' }).where(inArray(table.id, list.slice(i * CHUNK, (i + 1) * CHUNK).map(r => r.id)))))
+}
 
 /** ①⑦の行のうち、明細の中身の項目（直す・写す・比べるときに使う） */
 export const ITEM_FIELDS = ['kan', 'kou', 'moku', 'setsu', 'quantity', 'unitPrice', 'amount', 'vendor', 'spec', 'link', 'plannedTiming', 'remark', 'isNew', 'preExecution'] as const
@@ -35,9 +55,10 @@ export const itemValues = (r: ItemValues): ItemValues => Object.fromEntries(ITEM
 const sameItem = (a: BudgetItemRow, b: BudgetItemRow) =>
   a.itemNumber === b.itemNumber && a.deleted === b.deleted && a.bureau === b.bureau && a.team === b.team && ITEM_FIELDS.every(k => (a[k] ?? null) === (b[k] ?? null))
 
-/** 行を書いた順に読む（同じ時刻なら足した順） */
-async function rowsOf(table: ItemTable, where: ReturnType<typeof and>) {
-  const rows = await useDb().select().from(table).where(where).orderBy(asc(table.createdAt), sql`rowid`)
+/** 行を書いた順に読む（同じ時刻なら足した順。同じ項目の行は必ず同じ表にある） */
+async function rowsOf(tables: ItemTable[], where: (table: ItemTable) => ReturnType<typeof and>) {
+  const lists = await Promise.all(tables.map(t => useDb().select().from(t).where(where(t)).orderBy(asc(t.createdAt), sql`rowid`)))
+  const rows = lists.flat().sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
   // 内部 ID が空の行（移行のあとに古いコードが足した行）は、項目番号を内部 ID とみなす（移行で入れる値と同じ）
   return rows.map(r => (r.itemId ? r : { ...r, itemId: r.itemNumber }))
 }
@@ -50,7 +71,7 @@ export function latestByItem(rows: BudgetItemRow[]) {
 
 /** 今の予算：①の承認済みの最新の行（削除を除く）。執行依頼で選ぶ予算・予算の変更のもと */
 export async function currentRows(term = BUDGET_TERM) {
-  const rows = await rowsOf(schema.mainBudgetItems, and(eq(schema.mainBudgetItems.term, term), eq(schema.mainBudgetItems.status, 'approved')))
+  const rows = await rowsOf(mainTables(), t => and(eq(t.term, term), eq(t.status, 'approved')))
   return [...latestByItem(rows).values()].filter(r => !r.deleted)
 }
 
@@ -259,13 +280,11 @@ export function referenceNumberOf(itemNumber: string, issued: Map<string, Pick<I
 /** その期で使っている番号（①のすべての行と、補正予算の集約なら⑦の行） */
 export async function usedNumbers(round: Pick<BudgetRound, 'id' | 'kind' | 'term'> | null, term = BUDGET_TERM) {
   const db = useDb()
-  const pick = { itemId: schema.mainBudgetItems.itemId, itemNumber: schema.mainBudgetItems.itemNumber, bureau: schema.mainBudgetItems.bureau, team: schema.mainBudgetItems.team, kan: schema.mainBudgetItems.kan }
-  const main = await db.select(pick).from(schema.mainBudgetItems).where(eq(schema.mainBudgetItems.term, term)).orderBy(asc(schema.mainBudgetItems.createdAt), sql`rowid`)
-  const revised = round?.kind === '補正予算'
-    ? await db.select({ itemId: schema.revisedBudgetItems.itemId, itemNumber: schema.revisedBudgetItems.itemNumber, bureau: schema.revisedBudgetItems.bureau, team: schema.revisedBudgetItems.team, kan: schema.revisedBudgetItems.kan })
-      .from(schema.revisedBudgetItems).where(eq(schema.revisedBudgetItems.roundId, round.id)).orderBy(asc(schema.revisedBudgetItems.createdAt), sql`rowid`)
-    : []
-  return new Map([...main, ...revised].map(r => [r.itemNumber, r]))
+  const read = (t: ItemTable, where: ReturnType<typeof and>) =>
+    db.select({ itemId: t.itemId, itemNumber: t.itemNumber, bureau: t.bureau, team: t.team, kan: t.kan }).from(t).where(where).orderBy(asc(t.createdAt), sql`rowid`)
+  const main = await Promise.all(mainTables().map(t => read(t, eq(t.term, term))))
+  const revised = round?.kind === '補正予算' ? await Promise.all(revisedTables().map(t => read(t, eq(t.roundId, round.id)))) : []
+  return new Map([...main, ...revised].flat().map(r => [r.itemNumber, r]))
 }
 
 /** ⑤に行を足すときの値 */
@@ -280,16 +299,15 @@ export function reviewRow(roundId: number, item: Pick<BudgetItemRow, 'itemId' | 
 /** 集約の中身：局・担当、項目ごとの最新の行と⑤の状態、もとの予算の金額 */
 export async function roundState(round: BudgetRound) {
   const db = useDb()
-  const table = tableOf(round)
   const [{ bureaus, departments, teams }, rows, reviews, before] = await Promise.all([
     teamsOf(round.id),
     // 確定した集約は、今の予算（①の承認済みの行。予算の変更も入る）を出す
     round.status === 'confirmed'
-      ? rowsOf(schema.mainBudgetItems, and(eq(schema.mainBudgetItems.term, round.term), eq(schema.mainBudgetItems.status, 'approved')))
-      : rowsOf(table, eq(table.roundId, round.id)),
+      ? rowsOf(mainTables(), t => and(eq(t.term, round.term), eq(t.status, 'approved')))
+      : rowsOf(tablesOf(round), t => and(eq(t.roundId, round.id))),
     db.select().from(schema.budgetReviews).where(eq(schema.budgetReviews.roundId, round.id)).orderBy(asc(schema.budgetReviews.createdAt), sql`rowid`),
     // もとの予算：集約を始める前の、①の承認済みの最新の行
-    rowsOf(schema.mainBudgetItems, and(eq(schema.mainBudgetItems.term, round.term), eq(schema.mainBudgetItems.status, 'approved'), sql`${schema.mainBudgetItems.createdAt} < ${round.createdAt.getTime()}`)),
+    rowsOf(mainTables(), t => and(eq(t.term, round.term), eq(t.status, 'approved'), sql`${t.createdAt} < ${round.createdAt.getTime()}`)),
   ])
   const latest = latestByItem(rows)
   const base = new Map([...latestByItem(before)].filter(([, r]) => !r.deleted))
@@ -402,8 +420,8 @@ export async function openTeamOr404(teamId: number) {
  */
 export async function openItemOr404(rowId: string) {
   const db = useDb()
-  const row = (await db.query.mainBudgetItems.findFirst({ where: eq(schema.mainBudgetItems.id, rowId) }))
-    ?? (await db.query.revisedBudgetItems.findFirst({ where: eq(schema.revisedBudgetItems.id, rowId) }))
+  const found = await Promise.all([...mainTables(), ...revisedTables()].map(t => db.select().from(t).where(eq(t.id, rowId)).limit(1)))
+  const row = found.flat()[0]
   if (!row || row.roundId == null) throw createError({ statusCode: 404, message: '明細が見つかりません。' })
   const round = await db.query.budgetRounds.findFirst({ where: eq(schema.budgetRounds.id, row.roundId) })
   if (!round || round.status === 'confirmed') throw createError({ statusCode: 409, message: 'この予算は確定しているので、直せません。' })
@@ -449,7 +467,6 @@ export async function writeItem(
   user: SessionUser, status: BudgetItemStatus,
 ) {
   const db = useDb()
-  const table = tableOf(round)
   // 査定中に財務管理部が直すのは「折衝の反映」（査定の状態は変えない）。それ以外の修正は未提出に戻る
   const reviewer = can(user.role, 'reviewBudget') && round.status === 'reviewing'
   const now = new Date()
@@ -471,7 +488,7 @@ export async function writeItem(
   const action = !prev ? 'create' : reviewer ? 'reflect' : 'edit'
   const next: BudgetItemStatus = !prev ? (reviewer && status === 'approved' ? 'approved' : 'draft') : reviewer ? status : 'draft'
   await db.batch([
-    db.insert(table).values(row),
+    db.insert(tableOf(round, row.itemNumber)).values(row),
     db.insert(schema.budgetReviews).values(reviewRow(round.id, row, action, next, user, { rowId: row.id, at: now })),
   ])
   return row
@@ -554,7 +571,7 @@ export async function startRound(kind: BudgetKind, user: SessionUser) {
   if (kind === '本予算') return round!
 
   const copies = current.map(r => ({ ...r, id: newId(), roundId: round!.id, status: 'draft' as const, createdAt: now, createdBy: user.email }))
-  for (let i = 0; i < copies.length; i += CHUNK) await db.insert(schema.revisedBudgetItems).values(copies.slice(i, i + CHUNK))
+  for (const insert of insertsOf(copies, revisedTableOf)) await insert
   return round!
 }
 
@@ -573,16 +590,16 @@ export async function confirmRound(round: BudgetRound, user: SessionUser) {
   if (!live.some(r => !r.deleted)) throw createError({ statusCode: 400, message: '明細がありません。' })
 
   const now = new Date()
-  const current = await rowsOf(schema.mainBudgetItems, eq(schema.mainBudgetItems.term, round.term))
+  const current = await rowsOf(mainTables(), t => and(eq(t.term, round.term)))
   const mainLatest = latestByItem(current)
   const approvedLatest = latestByItem(current.filter(r => r.status === 'approved'))
-  const markIds: string[] = []
-  const appends: (typeof schema.mainBudgetItems.$inferInsert)[] = []
+  const marks: BudgetItemRow[] = []
+  const appends: ItemInsert[] = []
   const copy = (r: BudgetItemRow) => ({ ...r, id: newId(), status: 'approved' as const, createdAt: now, createdBy: user.email })
 
   if (round.kind === '本予算') {
     for (const r of latest.values()) {
-      if (mainLatest.get(r.itemId)?.id === r.id) markIds.push(r.id)
+      if (mainLatest.get(r.itemId)?.id === r.id) marks.push(r)
       else appends.push(copy(r))
     }
     // この集約にない項目（今の予算に残っているもの）は削除の行で消す
@@ -596,18 +613,12 @@ export async function confirmRound(round: BudgetRound, user: SessionUser) {
       if (now1 ? !sameItem(now1, r) : !r.deleted) appends.push({ ...copy(r), roundId: round.id })
     }
   }
-  const table = tableOf(round)
-  const latestIds = [...latest.values()].map(r => r.id)
   await db.batch([
     db.update(schema.budgetRounds).set({ status: 'confirmed', confirmedAt: now }).where(eq(schema.budgetRounds.id, round.id)),
-    ...Array.from({ length: Math.ceil(markIds.length / CHUNK) }, (_, i) =>
-      db.update(schema.mainBudgetItems).set({ status: 'approved' }).where(inArray(schema.mainBudgetItems.id, markIds.slice(i * CHUNK, (i + 1) * CHUNK)))),
-    ...Array.from({ length: Math.ceil(appends.length / CHUNK) }, (_, i) => db.insert(schema.mainBudgetItems).values(appends.slice(i * CHUNK, (i + 1) * CHUNK))),
+    ...approvalsOf(marks, mainTableOf),
+    ...insertsOf(appends, mainTableOf),
     // 補正予算：⑦の最新の行も承認済みにしておく
-    ...(round.kind === '補正予算'
-      ? Array.from({ length: Math.ceil(latestIds.length / CHUNK) }, (_, i) =>
-          db.update(table).set({ status: 'approved' }).where(inArray(table.id, latestIds.slice(i * CHUNK, (i + 1) * CHUNK))))
-      : []),
+    ...(round.kind === '補正予算' ? approvalsOf([...latest.values()], revisedTableOf) : []),
   ] as const)
   const { lines } = await rebuildCurrentBudget({ settlePreExecutions: round.kind === '本予算' })
   return { count: lines.length, total: lines.reduce((s, l) => s + l.budgetAmount, 0) }
@@ -617,9 +628,9 @@ export async function confirmRound(round: BudgetRound, user: SessionUser) {
 export async function cancelRound(round: BudgetRound) {
   const db = useDb()
   await db.batch([
-    db.delete(schema.mainBudgetItems).where(and(eq(schema.mainBudgetItems.roundId, round.id), eq(schema.mainBudgetItems.status, 'draft'))),
-    db.delete(schema.revisedBudgetItems).where(eq(schema.revisedBudgetItems.roundId, round.id)),
     db.delete(schema.budgetReviews).where(eq(schema.budgetReviews.roundId, round.id)),
+    ...mainTables().map(t => db.delete(t).where(and(eq(t.roundId, round.id), eq(t.status, 'draft')))),
+    ...revisedTables().map(t => db.delete(t).where(eq(t.roundId, round.id))),
     db.delete(schema.budgetTeams).where(eq(schema.budgetTeams.roundId, round.id)),
     db.delete(schema.budgetDepartments).where(eq(schema.budgetDepartments.roundId, round.id)),
     db.delete(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, round.id)),
