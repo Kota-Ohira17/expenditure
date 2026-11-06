@@ -18,6 +18,12 @@ const collecting = computed(() => view.value && view.value.round.status !== 'con
 const phase = computed(() => collecting.value?.round.status ?? 'confirmed')
 const itemsOf = (teamId: number) => view.value?.items.filter(i => i.teamId === teamId) ?? []
 
+/** まだ明細にしていない予算前執行 */
+const preNotAddedAll = computed(() => (collecting.value?.preExecutions ?? []).filter(p => !p.itemNumber))
+const preNotAddedOf = (teamId: number) => preNotAddedAll.value.filter(p => p.teamId === teamId).length
+/** 依頼に書いた担当名が、どの担当にも合わない予算前執行（同じ局の担当の画面で明細にできる） */
+const preNoTeam = computed(() => preNotAddedAll.value.filter(p => p.teamId == null))
+
 /** 担当のカードの中身：状態の札（次に動く人が分かるもの）・合計・最後に直した明細 */
 function teamCard(t: BudgetTeamView) {
   const items = itemsOf(t.id)
@@ -28,7 +34,8 @@ function teamCard(t: BudgetTeamView) {
         : { label: '承認済み', tone: 'green' as const }
   const last = items.reduce<BudgetItemView | undefined>((a, b) => (!a || new Date(b.updatedAt) > new Date(a.updatedAt) ? b : a), undefined)
   const changed = items.filter(i => changeOf(i).kind !== 'same').length
-  return { s, status, last, changed, mine: collecting.value?.myTeamIds.includes(t.id) && !reviewer.value }
+  const preNotAdded = preNotAddedOf(t.id)
+  return { s, status, last, changed, preNotAdded, mine: collecting.value?.myTeamIds.includes(t.id) && !reviewer.value }
 }
 /** 自分の担当を先に、そのあと要修正・未提出・査定待ち・承認済みの順に並べる */
 const order = { red: 0, gray: 1, yellow: 2, green: 3 }
@@ -85,7 +92,8 @@ async function act(run: () => Promise<unknown>, done: string, linesChanged = fal
 const start = reactive({ kind: '' as '' | '本予算' | '補正予算' })
 const startRound = () => act(() => $fetch('/api/budget/rounds', { method: 'POST', body: start }), `${BUDGET_TERM} ${start.kind}の集約を始めました。`)
 function confirmRound() {
-  if (!collecting.value || !confirm('予算を確定します。今の予算明細がこの予算に入れ替わります。よろしいですか？')) return
+  const notAdded = preNotAddedAll.value.length ? `\n明細にしていない予算前執行が${preNotAddedAll.value.length}件あります。同じ名前の明細がなければ、予算外の執行になります。` : ''
+  if (!collecting.value || !confirm(`予算を確定します。今の予算明細がこの予算に入れ替わります。${notAdded}\nよろしいですか？`)) return
   act(() => $fetch(`/api/budget/rounds/${collecting.value!.round.id}/confirm`, { method: 'POST' }), '予算を確定しました。執行依頼ではこの予算から選べます。', true)
 }
 /** まだ承認していない明細（未提出・要修正・査定待ち）の数。「すべて承認」で一度に承認できる */
@@ -183,6 +191,13 @@ function cancelRound() {
         </ul>
       </div>
       <p v-else-if="!reviewer" class="hint">明細の入力・提出はだれでもできます。下の「担当ごとの進み具合」から、入力する担当を開いてください。</p>
+      <div v-if="preNotAddedAll.length" class="card pre-notice">
+        <strong>明細にしていない予算前執行 {{ preNotAddedAll.length }}件</strong>
+        <p class="hint">担当の画面の「明細に追加」で今年の明細にしてください。担当のカードの「予算前執行 未追加」が目印です。</p>
+        <ul v-if="preNoTeam.length">
+          <li v-for="p in preNoTeam" :key="p.id">{{ p.seq }} {{ p.itemName }}（{{ p.bureau }}／依頼の担当名：{{ p.team }}）：担当名がどの担当とも合わないので、同じ局の担当の画面で明細にしてください。</li>
+        </ul>
+      </div>
 
       <h2>担当ごとの進み具合</h2>
       <BureauTabs v-model="bureau" :tabs="bureauTabs" />
@@ -198,6 +213,7 @@ function cancelRound() {
           <span v-if="c.mine" class="tag">あなたの担当</span>
           <span>支出 <strong>{{ formatYen(c.s.total) }}</strong></span>
           <span v-if="c.s.income">収入 <strong>{{ formatYen(c.s.income) }}</strong></span>
+          <span v-if="c.preNotAdded" class="tag fill red">予算前執行 未追加 {{ c.preNotAdded }}</span>
         </template>
         <InfoCard
           :to="`/budget/team/${c.team.id}`"
@@ -210,6 +226,7 @@ function cancelRound() {
           <template #tags>
             <span v-if="c.mine" class="tag">あなたの担当</span>
             <span v-if="c.changed" class="tag">変更 {{ c.changed }}件</span>
+            <span v-if="c.preNotAdded" class="tag fill red">予算前執行 未追加 {{ c.preNotAdded }}</span>
             <span v-if="c.s.returned" class="tag fill red">要修正 {{ c.s.returned }}</span>
             <span v-if="c.s.draft" class="tag fill">未提出 {{ c.s.draft }}</span>
             <span v-if="c.s.submitted" class="tag fill yellow">査定待ち {{ c.s.submitted }}</span>

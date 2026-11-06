@@ -211,9 +211,11 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
   for (const r of referenced) if (r.kind === 'budget' || r.kind === 'incomeBudget') lastYear.set(r.itemNumber, (lastYear.get(r.itemNumber) ?? 0) + r.amount)
   // 集約・査定に出す担当：昨年の本予算・決算（取り込んだ参考）に明細がある担当と、この集約に項目がある担当。
   // 参考をまだ取り込んでいなければ、すべての担当を出す
+  const preExecutions = await pendingPreExecutions(round, teams, latest)
+  const preTeamIds = new Set(preExecutions.map(p => p.teamId))
   const refKeys = new Set(referenced.map(r => `${r.bureau}|${r.team}`))
   const withItems = new Set([...latest.values()].filter(r => !r.deleted).map(r => `${r.bureau}|${r.team}`))
-  const listed = (t: BudgetTeam) => !refKeys.size || withItems.has(`${t.bureau}|${t.team}`)
+  const listed = (t: BudgetTeam) => !refKeys.size || withItems.has(`${t.bureau}|${t.team}`) || preTeamIds.has(t.id)
     || teamNamesOf(t).some(n => refKeys.has(`${t.bureau}|${n}`))
   const teamOrder = new Map(teams.map((t, i) => [t.id, i]))
   const items = [...latest.values()].flatMap((r) => {
@@ -250,6 +252,7 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
     departments,
     teams: teams.map(t => ({ ...t, listed: listed(t), department: departments.find(d => d.id === t.departmentId) ?? null, members: members.filter(m => m.bureau === t.bureau && m.team === t.team).map(m => ({ email: m.email, name: m.name })) })),
     items,
+    preExecutions,
     editableTeamIds: editable,
     myTeamIds: mine,
   }
@@ -504,6 +507,8 @@ export async function cancelRound(round: BudgetRound) {
     db.delete(schema.budgetDepartments).where(eq(schema.budgetDepartments.roundId, round.id)),
     db.delete(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, round.id)),
     db.delete(schema.budgetRounds).where(eq(schema.budgetRounds.id, round.id)),
+    // 消した明細と結んでいた予算前執行を、未追加に戻す
+    db.update(schema.preExecutionRequests).set({ itemNumber: '' }).where(eq(schema.preExecutionRequests.status, 'approved')),
   ])
 }
 
