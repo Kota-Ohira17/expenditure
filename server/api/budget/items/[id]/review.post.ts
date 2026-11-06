@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   if (status !== 'submitted') throw createError({ statusCode: 409, message: '査定待ちの明細ではありません。' })
   const { decision, comment } = parseOr400(budgetReviewSchema.safeParse(await readBody(event)))
   const next = decision === 'approve' ? 'approved' as const : 'returned' as const
-  const review = reviewRow(round.id, row.itemNumber, decision === 'approve' ? 'approve' : 'return', next, user, { comment, rowId: row.id })
+  const review = reviewRow(round.id, row, decision === 'approve' ? 'approve' : 'return', next, user, { comment, rowId: row.id })
   await useDb().insert(schema.budgetReviews).values(review)
   return { status: next, reviewComment: decision === 'approve' ? '' : comment, updatedAt: review.createdAt }
 })

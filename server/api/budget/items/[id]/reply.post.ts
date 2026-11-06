@@ -6,6 +6,6 @@ export default defineEventHandler(async (event) => {
   const { row, team, round, status } = await openItemOr404(String(getRouterParam(event, 'id')))
   if (!(await canEditTeam(user, team))) throw createError({ statusCode: 403, message: 'この担当の明細には返事できません。' })
   const { comment } = parseOr400(budgetReplySchema.safeParse(await readBody(event)))
-  await useDb().insert(schema.budgetReviews).values(reviewRow(round.id, row.itemNumber, 'reply', status, user, { comment, rowId: row.id }))
+  await useDb().insert(schema.budgetReviews).values(reviewRow(round.id, row, 'reply', status, user, { comment, rowId: row.id }))
   return { ok: true }
 })

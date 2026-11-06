@@ -23,6 +23,9 @@ const editable = computed(() => open.value && !!view.value?.editableTeamIds.incl
 const canAdd = computed(() => editable.value && (reviewer.value || phase.value === 'collecting'))
 const items = computed(() => view.value?.items.filter(i => i.teamId === teamId) ?? [])
 const summary = computed(() => teamSummary(items.value))
+/** この担当の予算前執行（担当名の合わないものは、同じ局の担当の画面に出す） */
+const preExecutions = computed(() => (view.value?.preExecutions ?? []).filter(p => p.teamId === teamId || (p.teamId == null && p.bureau === team.value?.bureau)))
+const preNotAdded = computed(() => preExecutions.value.filter(p => !p.itemNumber).length)
 /** 収入・支出ごとに、款でまとめる（並びは予算の表の順。収入が先） */
 const kans = computed(() => {
   const groups = new Map<string, BudgetItemView[]>()
@@ -81,6 +84,9 @@ const historyOpen = reactive(new Set<string>())
 const toggleHistory = (id: string) => (historyOpen.has(id) ? historyOpen.delete(id) : historyOpen.add(id))
 const newKan = ref('')
 const newFlow = ref<BudgetFlow>('expense')
+type PreExecution = NonNullable<typeof view.value>['preExecutions'][number]
+/** 予算前執行から足すときの、その予算前執行 */
+const newPre = ref<PreExecution | null>(null)
 const pending = ref(false)
 const errors = ref<string[]>([])
 const message = ref('')
@@ -103,7 +109,7 @@ async function run(task: () => Promise<unknown>, done = '') {
   }
 }
 const save = (value: BudgetItemInput) => run(() => editing.value === 'new'
-  ? $fetch(`/api/budget/teams/${teamId}/items`, { method: 'POST', body: value })
+  ? $fetch(`/api/budget/teams/${teamId}/items`, { method: 'POST', body: { ...value, preExecutionId: newPre.value?.id } })
   : $fetch(`/api/budget/items/${editing.value}`, { method: 'PATCH', body: value }), '保存しました。提出するまで査定には回りません。')
 function remove(i: BudgetItemView) {
   const text = i.baseItemId == null || view.value?.round.kind === '本予算' ? 'この明細を消します。' : 'この明細に「削除」の印を付けます（査定で承認されると、確定したときに予算から消えます）。'
@@ -116,8 +122,16 @@ function submit() {
   }
 }
 function addTo(flow: BudgetFlow, kan: string) {
+  newPre.value = null
   newFlow.value = flow
   newKan.value = kan
+  editing.value = 'new'
+}
+/** 予算前執行を明細にする（款は担当が選ぶ。金額と名前を初めに入れておく） */
+function addFromPre(p: PreExecution) {
+  newPre.value = p
+  newFlow.value = 'expense'
+  newKan.value = ''
   editing.value = 'new'
 }
 </script>
@@ -147,6 +161,29 @@ function addTo(flow: BudgetFlow, kan: string) {
         <p v-if="editable && !reviewer && phase === 'reviewing'" class="hint">査定中です。要修正になった明細だけ直して出し直せます。</p>
       </div>
 
+      <section v-if="preExecutions.length" class="pre-list" :class="{ todo: preNotAdded }">
+        <h2>予算前執行 <span class="muted">{{ preExecutions.length }}件<template v-if="preNotAdded">・未追加 {{ preNotAdded }}件</template></span></h2>
+        <p class="hint">この担当の予算前執行です。「明細に追加」で今年の明細にして、ほかの明細と同じように提出してください。明細にしておくと、本予算の確定のときにその明細へ付け替えます。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>番号</th><th>支出項目名</th><th class="num">金額</th><th>理由</th><th>明細</th></tr></thead>
+            <tbody>
+              <tr v-for="p in preExecutions" :key="p.id">
+                <td>{{ p.seq }}</td>
+                <td>{{ p.itemName }}<small v-if="p.teamId == null" class="muted">（依頼の担当名：{{ p.team }}）</small></td>
+                <td class="num">{{ formatYen(p.amount) }}</td>
+                <td class="remark">{{ p.reason }}</td>
+                <td>
+                  <span v-if="p.itemNumber" class="added">{{ p.itemNumber }}</span>
+                  <button v-else-if="canAdd" class="secondary" :disabled="pending" @click="addFromPre(p)">明細に追加</button>
+                  <span v-else class="not-added">未追加</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="mine">
         <header class="mine-head">
           <div class="mine-title">
@@ -159,7 +196,9 @@ function addTo(flow: BudgetFlow, kan: string) {
           </div>
         </header>
         <BudgetItemForm
-          v-if="editing === 'new'" :key="`${newFlow}|${newKan}`" :initial="{ flow: newFlow, kan: newKan }" :kans="kansByFlow[newFlow]" :kans-by-flow="kansByFlow" with-flow submit-label="追加"
+          v-if="editing === 'new'" :key="`${newFlow}|${newKan}|${newPre?.id}`"
+          :initial="newPre ? { flow: 'expense', kou: newPre.itemName, amount: newPre.amount, preExecution: true } : { flow: newFlow, kan: newKan }"
+          :kans="kansByFlow[newFlow]" :kans-by-flow="kansByFlow" :with-flow="!newPre" submit-label="追加"
           :pending="pending" :errors="errors" @submit="save" @cancel="editing = null"
         />
 
@@ -210,7 +249,7 @@ function addTo(flow: BudgetFlow, kan: string) {
                   </tr>
                   <tr v-if="historyOpen.has(i.id)">
                     <td colspan="9">
-                      <ReviewHistory :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
+                      <ReviewHistory :round-id="view.round.id" :track-id="i.trackId" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
                     </td>
                   </tr>
                   <tr v-if="editing === i.id">
@@ -312,6 +351,14 @@ function addTo(flow: BudgetFlow, kan: string) {
 .fold :deep(.app-icon) { transition: transform .15s; }
 .kan.folded .fold :deep(.app-icon) { transform: rotate(-90deg); }
 /* 今年の明細（提出する分）：色の付いた実線の枠で囲み、昨年の参考（点線）と見分ける */
+.pre-list { display: grid; gap: .5rem; margin: 1rem 0; padding: .8rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.pre-list.todo { border-color: var(--danger); }
+.pre-list h2 { margin: 0; font-size: 1.05rem; }
+.pre-list .muted { font-weight: 400; font-size: .85rem; }
+.pre-list td { vertical-align: middle; }
+.pre-list .remark { white-space: pre-wrap; }
+.pre-list .added { font-variant-numeric: tabular-nums; color: var(--done); }
+.pre-list .not-added { color: var(--danger); font-weight: 600; }
 .mine { margin: 1rem 0 1.6rem; padding: .2rem .8rem .8rem; border: 2px solid var(--accent); border-radius: 12px; background: var(--surface); }
 .mine-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
 .mine-title { flex: 1 1 14rem; display: grid; }

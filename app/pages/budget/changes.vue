@@ -4,7 +4,7 @@ import { BUDGET_FLOWS, flowOf, type BudgetFlow } from '#shared/budgetCompile'
  * 予算の変更。集約とは別に、確定した予算の明細を直す・足す・消す。
  * 担当の人は自分の担当の明細について申請し、財務管理部が承認すると予算に反映される（却下には理由を書く）。
  * 財務管理部は直接変更できる（すぐ反映）。反映した変更は履歴に残る（だれが変えたかは出さない）。
- * 集約中は変更できない（集約の明細で直す）。執行依頼で使われた明細は、削除と名前の変更ができない。
+ * 集約中は変更できない（集約の明細で直す）。執行依頼で使われた明細は、削除ができない。
  */
 import type { BudgetItemInput } from '#shared/schemas'
 import { BUDGET_TERM } from '#shared/constants'

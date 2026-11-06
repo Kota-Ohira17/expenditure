@@ -89,15 +89,16 @@ export const teamNamesOf = (team: Pick<BudgetTeam, 'team' | 'nameJa'>) => [...ne
 
 export async function referenceFor(round: BudgetRound, team: Pick<BudgetTeam, 'bureau' | 'team' | 'nameJa'>) {
   const db = useDb()
-  const [rows, state, files] = await Promise.all([
+  const [rows, state, files, issued] = await Promise.all([
     db.select().from(schema.budgetReferences)
       .where(and(eq(schema.budgetReferences.bureau, team.bureau), inArray(schema.budgetReferences.team, teamNamesOf(team))))
       .orderBy(asc(schema.budgetReferences.kind), asc(schema.budgetReferences.sortOrder)),
     roundState(round),
     referenceFiles(),
+    issuedNumbers(round.term),
   ])
-  // コピーすると、取り込んだ明細の項目番号のまま①に行を足すので、その番号の項目がこの集約にあればコピー済み
-  const inRound = new Set([...state.latest.values()].filter(r => !r.deleted).map(r => r.itemNumber))
+  // コピーすると、ふつうは取り込んだ明細の項目番号のまま①に行を足す。その番号の項目がこの集約にあればコピー済み（新しく振った番号の項目は、昨年の明細とは別物）
+  const inRound = new Set([...state.latest.values()].filter(r => !r.deleted).map(r => referenceNumberOf(r.itemNumber, issued)))
   const copiedIds = new Set(rows.filter(r => inRound.has(r.itemNumber)).map(r => r.id))
   const budget = rows.filter(r => r.kind === 'budget' || r.kind === 'incomeBudget')
   const settlement = rows.filter(r => r.kind === 'settlement' || r.kind === 'incomeSettlement')

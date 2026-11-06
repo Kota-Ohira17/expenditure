@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
     department: input.department,
     inCharge: input.inCharge,
     lineKey: line?.key ?? null,
+    itemId: line?.itemId ?? '',
     itemNumber: line?.itemNumber ?? input.itemNumber,
     itemName: input.itemName,
     budgetAmount: line?.budgetAmount ?? null,

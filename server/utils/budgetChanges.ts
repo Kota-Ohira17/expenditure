@@ -1,7 +1,7 @@
 import { and, eq, or } from 'drizzle-orm'
 import { BUDGET_TERM } from '../../shared/constants'
 import type { BudgetItemInput } from '../../shared/schemas'
-import type { BudgetChangeRequest, BudgetLine, BudgetTeam } from '../db/schema'
+import type { BudgetChangeRequest, BudgetItemRow, BudgetLine, BudgetTeam } from '../db/schema'
 import type { SessionUser } from './auth'
 
 /**
@@ -18,39 +18,37 @@ export async function currentBudget() {
   return { round, teams, rows }
 }
 
-/** 執行依頼で使われている項目か（使われていると、削除と名前の変更はできない） */
-async function isExecuted(itemNumber: string) {
-  if (!itemNumber) return false
+/** 執行依頼・収入の記録で使われている項目か（使われていると、削除も番号の振り直しもしない） */
+export async function isExecuted(row: Pick<BudgetItemRow, 'itemId' | 'itemNumber'>) {
   const db = useDb()
-  const [item] = await db.select({ id: schema.entryItems.id }).from(schema.entryItems).where(eq(schema.entryItems.itemNumber, itemNumber)).limit(1)
+  const [item] = await db.select({ id: schema.entryItems.id }).from(schema.entryItems).where(or(eq(schema.entryItems.itemId, row.itemId), eq(schema.entryItems.itemNumber, row.itemNumber))).limit(1)
   if (item) return true
-  const [entry] = await db.select({ id: schema.entries.id }).from(schema.entries).where(eq(schema.entries.itemNumber, itemNumber)).limit(1)
-  return !!entry
+  const [entry] = await db.select({ id: schema.entries.id }).from(schema.entries).where(eq(schema.entries.itemNumber, row.itemNumber)).limit(1)
+  if (entry) return true
+  const [income] = await db.select({ id: schema.incomeRecords.id }).from(schema.incomeRecords).where(or(eq(schema.incomeRecords.itemId, row.itemId), eq(schema.incomeRecords.itemNumber, row.itemNumber))).limit(1)
+  return !!income
 }
 
 /** 変更を確かめる（担当と項目があるか、執行依頼で使われていないか）。申請するときと反映するときに使う */
-export async function checkChange(change: { kind: BudgetChangeRequest['kind'], bureau: string, team: string, itemNumber: string, after: unknown }) {
+export async function checkChange(change: { kind: BudgetChangeRequest['kind'], bureau: string, team: string, itemNumber: string, itemId?: string, after: unknown }) {
   const { teams, rows } = await currentBudget()
   const team = teams.find(t => t.bureau === change.bureau && t.team === change.team)
     ?? (rows.some(r => r.bureau === change.bureau && r.team === change.team) ? { bureauNo: '', bureau: change.bureau, team: change.team } as BudgetTeam : null)
   if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
   if (change.kind === 'add') return { team, row: null, rows }
-  const row = rows.find(r => r.itemNumber === change.itemNumber && r.bureau === change.bureau && r.team === change.team)
+  const row = rows.find(r => (change.itemId ? r.itemId === change.itemId : r.itemNumber === change.itemNumber) && r.bureau === change.bureau && r.team === change.team)
   if (!row) throw createError({ statusCode: 404, message: '変える項目が予算に見つかりません（ほかの変更で消えた可能性があります）。' })
-  if (await isExecuted(row.itemNumber)) {
-    if (change.kind === 'delete') throw createError({ statusCode: 409, message: 'この項目は執行依頼で使われているので、削除できません。' })
-    const after = change.after as BudgetItemInput
-    const renamed = (['kan', 'kou', 'moku', 'setsu'] as const).some(k => (after[k] ?? '') !== row[k])
-    if (renamed) throw createError({ statusCode: 409, message: 'この項目は執行依頼で使われているので、款・項・目・節の名前は変えられません。' })
+  if (change.kind === 'delete' && await isExecuted(row)) {
+    throw createError({ statusCode: 409, message: 'この項目は執行依頼で使われているので、削除できません。' })
   }
   return { team, row, rows }
 }
 
 /** 承認待ちの変更がすでにある項目なら 409（同じ項目に申請が重ならないように） */
-export async function assertNoPending(itemNumber: string) {
-  if (!itemNumber) return
+export async function assertNoPending(itemId: string) {
+  if (!itemId) return
   const found = await useDb().query.budgetChangeRequests.findFirst({
-    where: and(eq(schema.budgetChangeRequests.itemNumber, itemNumber), eq(schema.budgetChangeRequests.status, 'pending')),
+    where: and(eq(schema.budgetChangeRequests.itemId, itemId), eq(schema.budgetChangeRequests.status, 'pending')),
   })
   if (found) throw createError({ statusCode: 409, message: 'この項目には承認待ちの変更があります。承認か却下を待つか、取り下げてから申請してください。' })
 }
@@ -65,20 +63,25 @@ export async function applyChange(change: BudgetChangeRequest, user: SessionUser
   const revising = open?.kind === '補正予算' ? open : null
 
   let itemNumber = change.itemNumber
+  let itemId = change.itemId
   let values: typeof schema.mainBudgetItems.$inferInsert
   if (change.kind === 'add') {
-    const used = await usedNumbers(revising)
     const bureauNo = team.bureauNo || rows.find(r => r.bureau === team.bureau)?.itemNumber.match(/^[a-z]+-?\d+/i)?.[0] || ''
-    itemNumber = nextItemNumber(used, { bureauNo, bureau: team.bureau, team: team.team }, after!.kan as string, after!.flow === 'income' ? 'income' : 'expense')
+    itemNumber = await allocateItemNumber(revising, { bureauNo, bureau: team.bureau, team: team.team }, after!.kan as string, after!.flow === 'income' ? 'income' : 'expense')
+    itemId = newId()
     values = {
-      id: newId(), term: BUDGET_TERM, roundId: null, itemNumber, bureau: team.bureau, team: team.team,
+      id: newId(), itemId, term: BUDGET_TERM, roundId: null, itemNumber, bureau: team.bureau, team: team.team,
       ...itemValues(after as unknown as ItemValues), deleted: false, status: 'approved',
       sortOrder: sortOrderFor(rows, team, after!.kan as string), createdAt: now, createdBy: user.email,
     }
   }
   else {
+    // 款を変えたら、番号を新しい款の番号に振り直す（執行で使った項目は変えない）
+    if (change.kind === 'edit') itemNumber = await numberForKan(revising, row!, team, after!.kan as string)
     values = {
-      ...row!, id: newId(), roundId: null, ...(change.kind === 'edit' ? itemValues(after as unknown as ItemValues) : {}),
+      ...row!, itemNumber, id: newId(), roundId: null, ...(change.kind === 'edit' ? itemValues(after as unknown as ItemValues) : {}),
+      // 款を変えたら、並びを新しい款のいちばん後ろに移す（款が2か所に分かれないように）
+      ...(change.kind === 'edit' && after!.kan !== row!.kan ? { sortOrder: sortOrderFor(rows.filter(r => r.itemNumber !== row!.itemNumber), team, after!.kan as string) } : {}),
       deleted: change.kind === 'delete', status: 'approved', createdAt: now, createdBy: user.email,
     }
   }
@@ -86,7 +89,7 @@ export async function applyChange(change: BudgetChangeRequest, user: SessionUser
     db.insert(schema.mainBudgetItems).values(values),
     // 補正予算の集約中は⑦にも足す（査定の状態は変えない）
     ...(revising ? [db.insert(schema.revisedBudgetItems).values({ ...values, id: newId(), roundId: revising.id, status: 'draft' })] : []),
-    db.update(schema.budgetChangeRequests).set({ status: 'approved', itemNumber, reviewComment: comment, reviewedAt: now, reviewedBy: user.email })
+    db.update(schema.budgetChangeRequests).set({ status: 'approved', itemId, itemNumber, reviewComment: comment, reviewedAt: now, reviewedBy: user.email })
       .where(eq(schema.budgetChangeRequests.id, change.id)),
   ] as const)
   await rebuildCurrentBudget()
@@ -121,13 +124,13 @@ export async function requestChangesFromEntry(
   const skipped: { itemNumber: string, reason: string }[] = []
   const { rows } = await currentBudget()
   for (const { line, actual } of changed) {
-    const row = rows.find(r => r.itemNumber === line.itemNumber)
+    const row = rows.find(r => r.itemId === line.itemId)
     if (!row) {
       skipped.push({ itemNumber: line.itemNumber, reason: '今の予算に項目が見つかりませんでした。' })
       continue
     }
     try {
-      await assertNoPending(row.itemNumber)
+      await assertNoPending(row.itemId)
     }
     catch {
       skipped.push({ itemNumber: row.itemNumber, reason: 'この項目にはもう承認待ちの変更があります。' })
@@ -142,6 +145,7 @@ export async function requestChangesFromEntry(
       id: newId(),
       term: BUDGET_TERM,
       kind: 'edit',
+      itemId: row.itemId,
       bureau: row.bureau,
       team: row.team,
       itemNumber: row.itemNumber,

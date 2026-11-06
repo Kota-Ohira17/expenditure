@@ -3,10 +3,10 @@
  * 項目の査定のやり取り（⑤査定DBの行）。開いたときに読み込む。
  * 追加・修正・提出・承認・要修正・返事を時刻の順に並べる（だれが行ったかは出さない）。canReply なら返事を書ける。
  */
-const props = defineProps<{ roundId: number, itemNumber: string, itemId: string, canReply?: boolean }>()
+const props = defineProps<{ roundId: number, trackId: string, itemId: string, canReply?: boolean }>()
 const emit = defineEmits<{ replied: [] }>()
 
-const { data: rows, refresh } = useFetch(`/api/budget/rounds/${props.roundId}/history`, { query: { item: props.itemNumber }, default: () => [], server: false })
+const { data: rows, refresh } = useFetch(`/api/budget/rounds/${props.roundId}/history`, { query: { item: props.trackId }, default: () => [], server: false })
 const ACTIONS: Record<string, string> = {
   create: '追加', edit: '修正', reflect: '財務管理部の修正', submit: '提出', approve: '承認', return: '要修正', reply: '返事',
 }

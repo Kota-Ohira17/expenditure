@@ -3,6 +3,6 @@ export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'reviewBudget')
   const round = await openRoundOr404(Number(getRouterParam(event, 'id')))
   assertPhase(round, 'reviewing')
-  const numbers = await numbersWhere(round, s => s !== 'approved')
-  return { count: await setStatuses(round, numbers, 'approve', user, 'すべて承認') }
+  const items = await itemsWhere(round, s => s !== 'approved')
+  return { count: await setStatuses(round, items, 'approve', user, 'すべて承認') }
 })

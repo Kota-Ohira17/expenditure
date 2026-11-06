@@ -225,6 +225,20 @@
       "when": 1793638749942,
       "tag": "0031_manual_journals",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793953432570,
+      "tag": "0032_issued_item_numbers",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1793953777204,
+      "tag": "0033_item_id",
+      "breakpoints": true
     }
   ]
 }

@@ -8,8 +8,8 @@ export default defineEventHandler(async (event) => {
   const user = await requireArrangeBudget(event)
   const round = await openRoundOr404(Number(getRouterParam(event, 'id')))
   assertPhase(round, 'collecting')
-  const numbers = await numbersWhere(round, s => s === 'draft' || s === 'returned')
-  const submitted = await setStatuses(round, numbers, 'submit', user, '集約終了')
+  const items = await itemsWhere(round, s => s === 'draft' || s === 'returned')
+  const submitted = await setStatuses(round, items, 'submit', user, '集約終了')
   await useDb().update(schema.budgetRounds).set({ status: 'closed' }).where(eq(schema.budgetRounds.id, round.id))
   return { submitted }
 })

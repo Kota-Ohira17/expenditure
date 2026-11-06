@@ -1,4 +1,4 @@
-import { blob, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { blob, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNTS, PAYMENT_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
@@ -69,6 +69,8 @@ export const budgetLines = sqliteTable('budget_lines', {
   key: text('key').primaryKey(),
   sortOrder: integer('sort_order').notNull(),
   itemNumber: text('item_number').notNull(),
+  /** 項目の内部 ID（①の item_id） */
+  itemId: text('item_id').notNull().default(''),
   bureauNo: text('bureau_no').notNull().default(''),
   bureau: text('bureau').notNull().default(''),
   team: text('team').notNull().default(''),
@@ -116,6 +118,8 @@ export const entryItems = sqliteTable('entry_items', {
   entryId: integer('entry_id').notNull().references(() => entries.id),
   lineKey: text('line_key').notNull(),
   itemNumber: text('item_number').notNull(),
+  /** 明細の内部 ID（①の item_id） */
+  itemId: text('item_id').notNull().default(''),
   label: text('label').notNull(),
   /** 予算での数量・取引先・金額（申請時点のコピー） */
   quantity: text('quantity').notNull().default(''),
@@ -168,6 +172,8 @@ export const incomeRecords = sqliteTable('income_records', {
   /** 選んだ収入の予算明細（budget_lines.key）。予算にない収入なら null */
   lineKey: text('line_key'),
   itemNumber: text('item_number').notNull(),
+  /** 選んだ収入の予算明細の内部 ID（①の item_id。予算にない収入なら空） */
+  itemId: text('item_id').notNull().default(''),
   itemName: text('item_name').notNull(),
   /** 記録したときの予算額（予算にない収入なら null） */
   budgetAmount: integer('budget_amount'),
@@ -348,6 +354,8 @@ const budgetItemColumns = () => ({
   roundId: integer('round_id'),
   /** 項目番号（例: out01-01-01 ＝ 局-款-項目）。行を足すときに自動で付け、以後はこの番号で同じ項目を追う */
   itemNumber: text('item_number').notNull(),
+  /** 項目の内部 ID。項目番号が変わっても同じで、同じ項目の行を結ぶ */
+  itemId: text('item_id').notNull().default(''),
   bureau: text('bureau').notNull(),
   team: text('team').notNull(),
   /** 項目名＝款・項・目・節 */
@@ -383,6 +391,22 @@ export const revisedBudgetItems = sqliteTable('revised_budget_items', budgetItem
 export type BudgetItemRow = typeof mainBudgetItems.$inferSelect
 
 /**
+ * 払い出した項目番号の控え。同時に足しても同じ番号にならないよう、ここへの登録で番号を取る（主キーで1つだけ通る）。
+ * 集約を中止しても消さないので、一度使った番号はその期の間もう使わない。
+ * source：allocated＝新しく振った番号、copy＝昨年の参考の番号をそのまま使った番号。
+ * reference_number：昨年の参考をコピーしたのに番号が使えず、新しく振ったときの、もとの参考の番号。
+ */
+export const issuedItemNumbers = sqliteTable('issued_item_numbers', {
+  term: text('term').notNull(),
+  itemNumber: text('item_number').notNull(),
+  source: text('source', { enum: ['allocated', 'copy'] }).notNull(),
+  referenceNumber: text('reference_number').notNull().default(''),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, t => [primaryKey({ columns: [t.term, t.itemNumber] })])
+
+export type IssuedItemNumber = typeof issuedItemNumbers.$inferSelect
+
+/**
  * ②予算変更申請DB。担当の人が申請し、財務管理部が承認すると①に行を足す（補正予算の集約中は⑦にも）。
  * 財務管理部は直接変更できる（申請と承認を同時に行った扱い）。だれが変えたかは画面に出さない（メールは記録だけ）。
  */
@@ -392,6 +416,8 @@ export const budgetChangeRequests = sqliteTable('budget_change_requests', {
   term: text('term').notNull(),
   /** 項目番号（新規は承認したときに付いた番号） */
   itemNumber: text('item_number').notNull().default(''),
+  /** 項目の内部 ID（①の item_id。新規は承認したときに付く） */
+  itemId: text('item_id').notNull().default(''),
   bureau: text('bureau').notNull(),
   team: text('team').notNull(),
   /** 新規／変更／削除 */
@@ -429,6 +455,8 @@ export const preExecutionRequests = sqliteTable('pre_execution_requests', {
   team: text('team').notNull(),
   /** 集約中の項目に対応するなら、その項目番号 */
   itemNumber: text('item_number').notNull().default(''),
+  /** 「明細に追加」で結んだ明細の内部 ID（①の item_id） */
+  itemId: text('item_id').notNull().default(''),
   kan: text('kan').notNull().default(''),
   kou: text('kou').notNull().default(''),
   moku: text('moku').notNull().default(''),
@@ -466,6 +494,8 @@ export const budgetReviews = sqliteTable('budget_reviews', {
   id: text('id').primaryKey(),
   roundId: integer('round_id').notNull(),
   itemNumber: text('item_number').notNull(),
+  /** 項目の内部 ID（項目番号が変わっても同じ。①⑦の item_id） */
+  itemId: text('item_id').notNull().default(''),
   /** 追加／修正／提出／承認／要修正／返事／財務管理部の修正（折衝の反映） */
   action: text('action', { enum: BUDGET_REVIEW_ACTIONS }).notNull(),
   /** この行のあとの査定の状態 */
