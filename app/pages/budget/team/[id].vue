@@ -249,7 +249,7 @@ function addFromPre(p: PreExecution) {
                   </tr>
                   <tr v-if="historyOpen.has(i.id)">
                     <td colspan="9">
-                      <ReviewHistory :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
+                      <ReviewHistory :round-id="view.round.id" :track-id="i.trackId" :item-id="i.id" :can-reply="editable" @replied="refresh()" />
                     </td>
                   </tr>
                   <tr v-if="editing === i.id">

@@ -7,7 +7,7 @@ import type { SessionUser } from './auth'
 /**
  * ④予算前執行DB。本予算が確定する前に、新しい年度の分を執行した記録。
  * 予算前執行は、ふつうの執行依頼（③）と同じフォームで、予算の表から選ばずに支出項目名を書いて出す（台帳で執行する）。
- * 本予算の集約では、担当の画面にその担当の予算前執行を出し、「明細に追加」で今年の明細にする（item_number で結ぶ）。
+ * 本予算の集約では、担当の画面にその担当の予算前執行を出し、「明細に追加」で今年の明細にする（item_id で結ぶ）。
  * 本予算が確定したら、結んだ明細（なければ同じ局・担当で同じ名前の予算明細）に、その執行依頼を付け替える（決算でその項目の執行になる）。
  */
 
@@ -55,7 +55,7 @@ export async function pendingPreExecutions(round: BudgetRound, teams: BudgetTeam
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
     .map((p) => {
       const entry = entries.find(e => e.id === p.entryId)
-      const linked = p.itemNumber ? latest.get(p.itemNumber) : undefined
+      const linked = p.itemId ? latest.get(p.itemId) : undefined
       return {
         id: p.id,
         teamId: teamOfPreExecution(teams, p)?.id ?? null,
@@ -65,7 +65,7 @@ export async function pendingPreExecutions(round: BudgetRound, teams: BudgetTeam
         itemName: p.itemName,
         amount: entry?.amount ?? p.amount,
         reason: p.reason,
-        itemNumber: linked && !linked.deleted ? p.itemNumber : '',
+        itemNumber: linked && !linked.deleted ? linked.itemNumber : '',
       }
     })
 }
@@ -81,8 +81,8 @@ export async function preExecutionToLink(round: BudgetRound, team: BudgetTeam, i
 }
 
 /** 予算前執行と、足した明細を結ぶ */
-export const linkPreExecution = (id: string, itemNumber: string) =>
-  useDb().update(schema.preExecutionRequests).set({ itemNumber }).where(eq(schema.preExecutionRequests.id, id))
+export const linkPreExecution = (id: string, itemId: string) =>
+  useDb().update(schema.preExecutionRequests).set({ itemId }).where(eq(schema.preExecutionRequests.id, id))
 
 /** 支出項目名が、予算明細の名前に合うか（名前そのもの、または項・目・節のどれか） */
 const matches = (line: ParsedBudgetLine, name: string) => {
@@ -95,7 +95,7 @@ const matches = (line: ParsedBudgetLine, name: string) => {
  * 「明細に追加」で結んだ明細を先に使い、なければ同じ局・担当で名前の合う明細を探す。
  * 執行依頼に、その明細との対応（entry_items）を足し、項目番号もその明細の番号にする。合う明細がなければ予算外のまま確定済みにする。
  */
-export async function settlePreExecutions(lines: ParsedBudgetLine[]) {
+export async function settlePreExecutions(lines: (ParsedBudgetLine & { itemId: string })[]) {
   const db = useDb()
   const list = await db.select().from(schema.preExecutionRequests)
     .where(and(eq(schema.preExecutionRequests.status, 'approved')))
@@ -104,13 +104,13 @@ export async function settlePreExecutions(lines: ParsedBudgetLine[]) {
   for (const p of list) {
     const entry = entries.find(e => e.id === p.entryId)
     const candidates = lines.filter(l => l.bureau === p.bureau && l.team === p.team)
-    const line = (p.itemNumber ? lines.find(l => l.itemNumber === p.itemNumber) : undefined) ?? candidates.find(l => matches(l, p.itemName)) ?? null
+    const line = (p.itemId ? lines.find(l => l.itemId === p.itemId) : undefined) ?? candidates.find(l => matches(l, p.itemName)) ?? null
     await db.batch([
       db.update(schema.preExecutionRequests).set({ status: 'settled', lineKey: line?.key ?? null }).where(eq(schema.preExecutionRequests.id, p.id)),
       ...(line && entry
         ? [
             db.insert(schema.entryItems).values({
-              entryId: entry.id, lineKey: line.key, itemNumber: line.itemNumber, label: line.label,
+              entryId: entry.id, lineKey: line.key, itemId: line.itemId, itemNumber: line.itemNumber, label: line.label,
               quantity: line.quantity, vendor: line.vendor, budgetAmount: line.budgetAmount, actualAmount: entry.amount,
             }),
             db.update(schema.entries).set({ itemNumber: line.itemNumber }).where(eq(schema.entries.id, entry.id)),

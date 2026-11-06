@@ -60,7 +60,7 @@ export default defineEventHandler(async (event) => {
     const itemNumber = used.has(l.itemNumber) ? nextItemNumber(used, { bureauNo: team.bureauNo, bureau: l.bureau, team: l.team }, l.kan, flowOf(l.itemNumber)) : l.itemNumber
     used.set(itemNumber, { bureau: l.bureau, team: l.team, kan: l.kan })
     return {
-      id: newId(), term: BUDGET_TERM, roundId: round!.id, itemNumber, bureau: l.bureau, team: l.team,
+      id: newId(), itemId: newId(), term: BUDGET_TERM, roundId: round!.id, itemNumber, bureau: l.bureau, team: l.team,
       kan: l.kan, kou: l.kou, moku: l.moku, setsu: l.setsu, amount: l.budgetAmount, quantity: l.quantity,
       vendor: l.vendor, remark: l.remark, link: l.link, plannedTiming: l.plannedTiming,
       spec: '', unitPrice: null as number | null, isNew: false, preExecution: false, ...extras.get(l.key),

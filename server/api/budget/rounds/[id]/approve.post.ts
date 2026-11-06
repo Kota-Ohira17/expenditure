@@ -8,6 +8,6 @@ export default defineEventHandler(async (event) => {
   const { ids } = parseOr400(budgetApproveSchema.safeParse(await readBody(event)))
   const { latest, statusOf } = await roundState(round)
   const wanted = new Set(ids)
-  const numbers = [...latest.values()].filter(r => wanted.has(r.id) && statusOf(r.itemNumber) === 'submitted').map(r => r.itemNumber)
-  return { count: await setStatuses(round, numbers, 'approve', user, 'まとめて承認') }
+  const items = [...latest.values()].filter(r => wanted.has(r.id) && statusOf(r.itemId) === 'submitted')
+  return { count: await setStatuses(round, items, 'approve', user, 'まとめて承認') }
 })

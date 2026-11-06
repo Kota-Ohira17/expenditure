@@ -213,7 +213,7 @@ async function approveAll(ids: string[]) {
                 <AppIcon name="message-circle" /> やり取り（{{ i.reviewCount }}）
               </button>
               <ReviewHistory
-                v-if="historyOpen.has(i.id) && view" :round-id="view.round.id" :item-number="i.itemNumber" :item-id="i.id"
+                v-if="historyOpen.has(i.id) && view" :round-id="view.round.id" :track-id="i.trackId" :item-id="i.id"
                 can-reply @replied="refresh()"
               />
             </template>

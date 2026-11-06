@@ -53,6 +53,7 @@ export async function insertEntry(
       ? await tx.insert(schema.entryItems).values(lines.map((l, i) => ({
           entryId: entry!.id,
           lineKey: l.key,
+          itemId: l.itemId,
           itemNumber: l.itemNumber,
           label: l.label,
           quantity: l.quantity,

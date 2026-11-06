@@ -18,13 +18,14 @@ export default defineEventHandler(async (event) => {
   if (!(await canRequestChange(user, team))) throw createError({ statusCode: 403, message: 'この担当の予算は変更を申請できません。' })
   const draft = { kind: body.kind, bureau: team.bureau, team: team.team, itemNumber: body.kind === 'add' ? '' : body.itemNumber!, after: body.values ?? null }
   const { row } = await checkChange(draft)
-  await assertNoPending(draft.itemNumber)
+  await assertNoPending(row?.itemId ?? '')
 
   const direct = can(user.role, 'reviewBudget')
   const [change] = await useDb().insert(schema.budgetChangeRequests).values({
     id: newId(),
     term: BUDGET_TERM,
     ...draft,
+    itemId: row?.itemId ?? '',
     after: body.kind === 'delete' ? null : body.values!,
     before: row ? itemValues(row) : null,
     reason: body.reason,

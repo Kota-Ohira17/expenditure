@@ -13,11 +13,10 @@ export default defineEventHandler(async (event) => {
   const body = parseOr400(budgetItemSchema.safeParse(raw))
   const preExecutionId = typeof raw?.preExecutionId === 'string' ? raw.preExecutionId : ''
   if (preExecutionId) await preExecutionToLink(round, team, preExecutionId, body.flow)
-  const [{ latest }, used] = await Promise.all([roundState(round), usedNumbers(round)])
-  const itemNumber = nextItemNumber(used, team, body.kan, body.flow)
+  const [{ latest }, itemNumber] = await Promise.all([roundState(round), allocateItemNumber(round, team, body.kan, body.flow)])
   const row = await writeItem(round, null, {
     ...(body as ItemValues), ...(preExecutionId ? { preExecution: true } : {}), itemNumber, bureau: team.bureau, team: team.team, sortOrder: sortOrderFor([...latest.values()], team, body.kan),
   }, user, 'draft')
-  if (preExecutionId) await linkPreExecution(preExecutionId, itemNumber)
+  if (preExecutionId) await linkPreExecution(preExecutionId, row.itemId)
   return row
 })
