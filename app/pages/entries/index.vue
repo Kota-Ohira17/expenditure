@@ -105,7 +105,7 @@ const DETAIL_LABELS: Record<string, string> = {
 }
 
 function detailRows(row: Row) {
-  const { bank, ...rest } = row.details as Record<string, unknown>
+  const { bank, preExecutionItemId: _item, preExecutionSettled: _settled, ...rest } = row.details as Record<string, unknown>
   return Object.entries({ ...rest, ...(bank as object | undefined) })
     .filter(([, v]) => v !== '' && v != null)
     .map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: v === true ? (k === 'preExecution' ? 'はい' : '承認済み') : String(v), isUrl: k === 'url' }))

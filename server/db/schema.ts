@@ -40,7 +40,7 @@ export const entries = sqliteTable('entries', {
   /** 振込期限・必要日・立替予定日・執行希望日・(証憑)立替日 */
   deadline: text('deadline'),
   remark: text('remark').notNull().default(''),
-  /** 形態ごとの追加項目。口座情報は details.bank に入り、財務局長・管理者以外には返さない */
+  /** 形態ごとの追加項目。口座情報は details.bank に入り、財務局長・管理者以外には返さない。予算前執行は preExecution・preExecutionReason・preExecutionItemId（結んだ明細）・preExecutionSettled（本予算の確定で付け替え済み） */
   details: text('details', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
   attachmentId: integer('attachment_id').references(() => attachments.id),
   /** 執行時に確定する執行形態（振込（SMBC）/ 口座引落 / 立替 など） */
@@ -439,51 +439,6 @@ export const budgetChangeRequests = sqliteTable('budget_change_requests', {
   reviewedBy: text('reviewed_by'),
 })
 export type BudgetChangeRequest = typeof budgetChangeRequests.$inferSelect
-
-/**
- * ④予算前執行DB。本予算が確定する前に、新しい年度の分を執行した記録（執行依頼③と1対1）。
- * 予算前執行は、予算の表から選ばない執行依頼として出し（支出項目名を書く）、ここに支出項目名と執行依頼を記録する。
- * 本予算が確定したら、同じ局・担当で同じ名前の予算項目に、その執行依頼を付け替える（合う項目がなければ予算外の執行のまま）。
- */
-export const PRE_EXECUTION_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn', 'settled'] as const
-export const preExecutionRequests = sqliteTable('pre_execution_requests', {
-  id: text('id').primaryKey(),
-  term: text('term').notNull(),
-  /** 申請したときの本予算の集約 */
-  roundId: integer('round_id'),
-  bureau: text('bureau').notNull(),
-  team: text('team').notNull(),
-  /** 集約中の項目に対応するなら、その項目番号 */
-  itemNumber: text('item_number').notNull().default(''),
-  /** 「明細に追加」で結んだ明細の内部 ID（①の item_id） */
-  itemId: text('item_id').notNull().default(''),
-  kan: text('kan').notNull().default(''),
-  kou: text('kou').notNull().default(''),
-  moku: text('moku').notNull().default(''),
-  setsu: text('setsu').notNull().default(''),
-  quantity: text('quantity').notNull().default(''),
-  vendor: text('vendor').notNull().default(''),
-  /** 申請額（枠の上限） */
-  amount: integer('amount').notNull(),
-  reason: text('reason').notNull().default(''),
-  neededBy: text('needed_by').notNull().default(''),
-  /** 承認待ち／承認済み／却下／取り下げ／確定済み（本予算の項目に付け替えた） */
-  status: text('status', { enum: PRE_EXECUTION_STATUSES }).notNull().default('pending'),
-  /** 認めた額（申請額から減らせる） */
-  approvedAmount: integer('approved_amount'),
-  reviewComment: text('review_comment').notNull().default(''),
-  /** 本予算が確定したあとに付け替えた予算明細（予算にない場合は null） */
-  lineKey: text('line_key'),
-  /** この予算前執行の執行依頼（③）。予算前執行は、予算の表から選ばない執行依頼として出す */
-  entryId: integer('entry_id').references(() => entries.id),
-  /** 執行依頼に書いた支出項目名（本予算の確定のとき、同じ名前の項目に付け替える） */
-  itemName: text('item_name').notNull().default(''),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  createdBy: text('created_by').notNull(),
-  reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }),
-  reviewedBy: text('reviewed_by'),
-})
-export type PreExecutionRequest = typeof preExecutionRequests.$inferSelect
 
 /**
  * ⑤査定DB。提出・承認・要修正・修正・返事を、項目ごとに1行ずつ残す（書き換えない）。

@@ -61,7 +61,6 @@ export default defineEventHandler(async (event) => {
     },
     attachmentId,
   }, lines, input)
-  if (preExecution) await recordPreExecution(entry, user)
   // 執行依頼は受け付けたので、予算の変更の申請で失敗しても依頼は取り消さない（申請できなかった明細を返す）
   const budgetChangeRequests = changed.length && requestBudgetChange
     ? await requestChangesFromEntry(entry, changed, user, budgetChangeReason)

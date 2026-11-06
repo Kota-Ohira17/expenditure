@@ -21,7 +21,7 @@ import type { SessionUser } from './auth'
 
 const CHUNK = 100
 
-/** ランダムな id（①②④⑤⑦の行） */
+/** ランダムな id（①②⑤⑦の行） */
 export const newId = () => crypto.randomUUID().replaceAll('-', '')
 
 /** 集約の種類で、行を書く表（本予算は①、補正予算は⑦） */
@@ -624,9 +624,9 @@ export async function cancelRound(round: BudgetRound) {
     db.delete(schema.budgetDepartments).where(eq(schema.budgetDepartments.roundId, round.id)),
     db.delete(schema.budgetBureaus).where(eq(schema.budgetBureaus.roundId, round.id)),
     db.delete(schema.budgetRounds).where(eq(schema.budgetRounds.id, round.id)),
-    // 消した明細と結んでいた予算前執行を、未追加に戻す
-    db.update(schema.preExecutionRequests).set({ itemId: '' }).where(eq(schema.preExecutionRequests.status, 'approved')),
   ])
+  // 消した明細と結んでいた予算前執行を、未追加に戻す
+  await unlinkPreExecutions()
 }
 
 /**
