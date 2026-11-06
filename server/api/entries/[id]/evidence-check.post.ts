@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const e = schema.entries
 
   const entry = await db.query.entries.findFirst({ where: eq(e.id, id) })
-  if (!entry || entry.kind === 'income') throw createError({ statusCode: 404, message: '申請が見つかりません。' })
+  if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
   if (entry.status !== 'done') throw createError({ statusCode: 400, message: '執行待ちの申請の証憑は、まだ確認できません。' })
   const evidences = (await evidencesOf([id])).get(id) ?? []
   const hasEvidence = entry.kind === 'execution' ? evidences.length > 0 : Boolean(entry.attachmentId)

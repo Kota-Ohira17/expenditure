@@ -19,35 +19,33 @@ export default defineEventHandler(async (event) => {
     if (flowOf(line.itemNumber) !== 'income') throw createError({ statusCode: 400, message: '支出の明細は収入の記録では選べません。' })
   }
 
-  const saved = await insertEntry({
+  const [income] = await db.insert(schema.incomeRecords).values({
     seq: await nextSeq('income'),
-    kind: 'income',
-    type: '収入',
     status: 'pending',
     applicantEmail: user.email,
     applicantName: input.applicantName,
     department: input.department,
     inCharge: input.inCharge,
+    lineKey: line?.key ?? null,
+    itemId: line?.itemId ?? '',
     itemNumber: line?.itemNumber ?? input.itemNumber,
     itemName: input.itemName,
+    budgetAmount: line?.budgetAmount ?? null,
     amount: input.amount,
-    deadline: input.receivedOn,
-    paymentMethod: input.method,
+    receivedOn: input.receivedOn,
+    payer: input.payer,
+    method: input.method,
+    account: input.method === '振込' ? input.account : null,
     remark: input.remark,
-    details: {
-      payer: input.payer,
-      account: input.method === '振込' ? input.account : null,
-      ...(line ? {} : { budgetPath: input.budgetPath }),
-    },
+    details: line ? {} : { budgetPath: input.budgetPath },
     createdAt: new Date(),
-  }, line ? [line] : [], line ? { itemAmounts: { [line.key]: input.amount } } : {})
-  const income = toIncome(saved)
+  }).returning()
 
   if (file) {
-    const attachmentId = await saveAttachment(file, incomeFileLabel(income, 1))
-    await db.insert(schema.evidenceFiles).values({ entryId: income.id, attachmentId, kind: '入金の明細', uploadedBy: user.email, createdAt: new Date() })
+    const attachmentId = await saveAttachment(file, incomeFileLabel(income!, 1))
+    await db.insert(schema.incomeFiles).values({ incomeId: income!.id, attachmentId, kind: '入金の明細', uploadedBy: user.email, createdAt: new Date() })
   }
   setResponseStatus(event, 201)
-  const [view] = await withIncomeFiles([income])
+  const [view] = await withIncomeFiles([income!])
   return view
 })

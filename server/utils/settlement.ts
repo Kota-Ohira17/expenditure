@@ -1,8 +1,7 @@
-import { and, asc, eq, inArray, ne } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import { flowOf } from '../../shared/budgetCompile'
-import type { BudgetLine, Entry, EntryItem } from '../db/schema'
+import type { BudgetLine, Entry, EntryItem, IncomeRecord } from '../db/schema'
 import type { EvidenceView } from './evidence'
-import type { IncomeRecord } from './incomes'
 
 /**
  * 決算シートの中身。Excel（/api/settlement.xlsx）とGoogleスプレッドシート（/api/settlement/sheets）の
@@ -85,7 +84,7 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
   const lines = await db.select().from(schema.budgetLines).orderBy(asc(schema.budgetLines.sortOrder))
   const sheetRows = await db.select().from(schema.budgetSheetRows).orderBy(asc(schema.budgetSheetRows.sortOrder))
   const rows = await withEvidences(await withItems(
-    await db.select().from(schema.entries).where(and(eq(schema.entries.status, 'done'), ne(schema.entries.kind, 'income'))).orderBy(asc(schema.entries.createdAt)),
+    await db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).orderBy(asc(schema.entries.createdAt)),
   ))
   // 請求書・以前の証憑提出の添付のファイル名
   const attachmentIds = rows.map(r => r.attachmentId).filter((id): id is number => id != null)
@@ -96,7 +95,7 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
   // 支出の決算は支出の明細だけで作る（収入の明細は収入詳細に出す）
   const expenseLines = lines.filter(l => flowOf(l.itemNumber) === 'expense')
   const settled = settledLines(expenseLines, done, sheetExtras(sheetRows))
-  const incomes = (await listIncomes(eq(schema.entries.status, 'done'))).sort((a, b) => a.receivedOn.localeCompare(b.receivedOn))
+  const incomes = await db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')).orderBy(asc(schema.incomeRecords.receivedOn))
   return [
     detailTable(settled), evidenceTable(settled, origin), executionTable(done, origin),
     incomeTable(incomeLines(lines.filter(l => flowOf(l.itemNumber) === 'income'), incomes)),

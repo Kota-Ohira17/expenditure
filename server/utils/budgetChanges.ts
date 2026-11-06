@@ -24,7 +24,9 @@ export async function isExecuted(row: Pick<BudgetItemRow, 'itemId' | 'itemNumber
   const [item] = await db.select({ id: schema.entryItems.id }).from(schema.entryItems).where(or(eq(schema.entryItems.itemId, row.itemId), eq(schema.entryItems.itemNumber, row.itemNumber))).limit(1)
   if (item) return true
   const [entry] = await db.select({ id: schema.entries.id }).from(schema.entries).where(eq(schema.entries.itemNumber, row.itemNumber)).limit(1)
-  return !!entry
+  if (entry) return true
+  const [income] = await db.select({ id: schema.incomeRecords.id }).from(schema.incomeRecords).where(or(eq(schema.incomeRecords.itemId, row.itemId), eq(schema.incomeRecords.itemNumber, row.itemNumber))).limit(1)
+  return !!income
 }
 
 /** 変更を確かめる（担当と項目があるか、執行依頼で使われていないか）。申請するときと反映するときに使う */
