@@ -1,6 +1,6 @@
 import { blob, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import type { AccountKind } from '../../shared/constants'
-import { CASH_ACCOUNTS, PAYMENT_TYPES } from '../../shared/constants'
+import { CASH_ACCOUNTS, ENTRY_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
 
 /**
@@ -23,10 +23,11 @@ export const attachments = sqliteTable('attachments', {
  */
 export const entries = sqliteTable('entries', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 表示用の通し番号（執行依頼: E-001 / 証憑: R-001） */
+  /** 表示用の通し番号（執行依頼: E-001 / 証憑: R-001 / 収入: I-001） */
   seq: text('seq').notNull().unique(),
-  kind: text('kind', { enum: ['execution', 'evidence'] }).notNull(),
-  type: text('type', { enum: PAYMENT_TYPES }).notNull(),
+  /** execution＝執行依頼、evidence＝以前の証憑提出、income＝収入の記録 */
+  kind: text('kind', { enum: ['execution', 'evidence', 'income'] }).notNull(),
+  type: text('type', { enum: ENTRY_TYPES }).notNull(),
   status: text('status', { enum: ['pending', 'done'] }).notNull().default('pending'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   applicantEmail: text('applicant_email').notNull(),
@@ -37,14 +38,15 @@ export const entries = sqliteTable('entries', {
   itemName: text('item_name').notNull(),
   amount: integer('amount'),
   quantity: text('quantity'),
-  /** 振込期限・必要日・立替予定日・執行希望日・(証憑)立替日 */
+  /** 振込期限・必要日・立替予定日・執行希望日・(証憑)立替日・(収入)入金日 */
   deadline: text('deadline'),
   remark: text('remark').notNull().default(''),
-  /** 形態ごとの追加項目。口座情報は details.bank に入り、財務局長・管理者以外には返さない */
+  /** 形態ごとの追加項目。口座情報は details.bank に入り、財務局長・管理者以外には返さない。収入は相手先 details.payer・受け取った口座 details.account */
   details: text('details', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
   attachmentId: integer('attachment_id').references(() => attachments.id),
-  /** 執行時に確定する執行形態（振込（SMBC）/ 口座引落 / 立替 など） */
+  /** 執行時に確定する執行形態（振込（SMBC）/ 口座引落 / 立替 など）。収入は受け取り方（振込・現金・その他） */
   paymentMethod: text('payment_method'),
+  /** 執行した時刻。収入は入金を確かめた時刻（executed_by はその人） */
   executedAt: integer('executed_at', { mode: 'timestamp_ms' }),
   executedBy: text('executed_by'),
   /** 証憑を確認した時刻と人（財務局長・管理者）。証憑を付け直す・外すと空に戻る（確認待ち） */
@@ -152,60 +154,6 @@ export const evidenceFiles = sqliteTable('evidence_files', {
 })
 
 export type EvidenceFile = typeof evidenceFiles.$inferSelect
-
-/**
- * 収入の記録（入ってきたお金。協賛金・売上など）。支出の執行依頼にあたる。
- * 収入の予算明細（項目番号が in から始まる）から1つ選ぶか、予算にない収入として款〜節と項目番号を書く。
- * 財務局長・管理者が入金を確かめると確認済みになる。
- */
-export const incomeRecords = sqliteTable('income_records', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 表示用の通し番号（I-001） */
-  seq: text('seq').notNull().unique(),
-  /** pending＝入金の確認待ち、done＝確認済み */
-  status: text('status', { enum: ['pending', 'done'] }).notNull().default('pending'),
-  applicantEmail: text('applicant_email').notNull(),
-  applicantName: text('applicant_name').notNull(),
-  /** 局（略称） */
-  department: text('department').notNull(),
-  inCharge: text('in_charge').notNull(),
-  /** 選んだ収入の予算明細（budget_lines.key）。予算にない収入なら null */
-  lineKey: text('line_key'),
-  itemNumber: text('item_number').notNull(),
-  /** 選んだ収入の予算明細の内部 ID（①の item_id。予算にない収入なら空） */
-  itemId: text('item_id').notNull().default(''),
-  itemName: text('item_name').notNull(),
-  /** 記録したときの予算額（予算にない収入なら null） */
-  budgetAmount: integer('budget_amount'),
-  /** 入ってきた金額 */
-  amount: integer('amount').notNull(),
-  /** 入金日 */
-  receivedOn: text('received_on').notNull(),
-  /** 相手先（協賛企業・購入者など） */
-  payer: text('payer').notNull().default(''),
-  /** 受け取り方（振込・現金・その他） */
-  method: text('method').notNull(),
-  /** 振込で受け取った口座（SMBC・ゆうちょ・MUFG）。振込以外は null。出納帳でどの口座に入ったかに使う */
-  account: text('account'),
-  remark: text('remark').notNull().default(''),
-  /** 予算にない収入の款・項・目・節（budgetPath）など */
-  details: text('details', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
-  confirmedAt: integer('confirmed_at', { mode: 'timestamp_ms' }),
-  confirmedBy: text('confirmed_by'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-})
-
-export type IncomeRecord = typeof incomeRecords.$inferSelect
-
-/** 収入の証憑（入金の明細・領収書の控えなど。1件の収入に何枚でも） */
-export const incomeFiles = sqliteTable('income_files', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  incomeId: integer('income_id').notNull().references(() => incomeRecords.id),
-  attachmentId: integer('attachment_id').notNull().references(() => attachments.id),
-  kind: text('kind').notNull(),
-  uploadedBy: text('uploaded_by').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-})
 
 /**
  * 出納帳に手で書く記録（財務局長・管理者）。執行・収入から自動で出る出入り以外のもの。

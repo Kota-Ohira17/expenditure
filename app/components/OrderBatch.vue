@@ -5,6 +5,7 @@
  * 発注し終えたらまとめて対応済みにできる。
  */
 import { SHIPPING_RULES } from '#shared/shipping'
+import { extractLinks } from '#shared/links'
 
 type Row = {
   id: number
@@ -32,7 +33,7 @@ const earliest = computed(() => picked.value.map(r => r.deadline).filter(Boolean
 
 const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
 const detailOf = (r: Row) => (r.details ?? {}) as { url?: string, deliveryPlace?: string }
-const linksOf = (r: Row) => (detailOf(r).url ?? '').split(/\s+/).filter(u => /^https?:\/\//.test(u))
+const linksOf = (r: Row) => extractLinks(detailOf(r).url ?? '')
 /** 数量（対応時に直した値 → 申請の数量 → 明細ごとの数量） */
 const quantityOf = (r: Row) => r.quantity || r.items.map(i => i.actualQuantity ?? i.quantity).filter(Boolean).join('、')
 

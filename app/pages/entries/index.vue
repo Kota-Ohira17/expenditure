@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { TRANSFER_BANKS, VIEWS, type ViewKey } from '#shared/constants'
+import { extractLinks, splitByLinks } from '#shared/links'
 import { shortenItemNumbers } from '#shared/itemNumbers'
 import { SHIPPING_RULES, shippingAdvice } from '#shared/shipping'
 
@@ -110,9 +111,11 @@ function detailRows(row: Row) {
     .map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: v === true ? (k === 'preExecution' ? 'はい' : '承認済み') : String(v), isUrl: k === 'url' }))
 }
 
-/** 商品ページのリンク（改行・空白区切りで複数あり得る） */
-const splitLinks = (v: string) => v.split(/\s+/).filter(Boolean)
-const isLink = (u: string) => /^https?:\/\//.test(u)
+/** 一覧の行からそのまま開く商品のリンク（依頼に書いたものと、選んだ予算明細のもの） */
+function rowLinks(row: Row) {
+  const url = (row.details as { url?: unknown }).url
+  return extractLinks([typeof url === 'string' ? url : '', ...row.items.map(i => i.link)].join('\n'))
+}
 
 const yen = (n: number | null) => (n == null ? '' : `${n.toLocaleString('ja-JP')}円`)
 const dateTime = (s: string | Date | null) => (s ? new Date(s).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' }) : '')
@@ -291,7 +294,12 @@ async function setDone(row: Row, done: boolean) {
                 <td class="c-seq">{{ row.seq }}</td>
                 <td class="c-date">{{ dateTime(row.createdAt) }}</td>
                 <td data-label="項目番号">{{ shortenItemNumbers(row.itemNumber) }}</td>
-                <td class="c-name">{{ row.itemName }}</td>
+                <td class="c-name">
+                  {{ row.itemName }}
+                  <span v-if="rowLinks(row).length" class="row-links">
+                    <a v-for="(u, n) in rowLinks(row)" :key="u" :href="u" target="_blank" rel="noopener noreferrer" @click.stop>商品ページ{{ rowLinks(row).length > 1 ? n + 1 : '' }}</a>
+                  </span>
+                </td>
                 <td data-label="数量">{{ row.quantity }}</td>
                 <td class="num c-amount">{{ yen(row.amount) }}</td>
                 <td data-label="形態">{{ methodLabel(row) }}</td>
@@ -370,9 +378,7 @@ async function setDone(row: Row, done: boolean) {
                       <dt>{{ d.label }}</dt>
                       <dd>
                         <template v-if="d.isUrl">
-                          <template v-for="(u, n) in splitLinks(d.value)" :key="n">
-                            <a v-if="isLink(u)" :href="u" target="_blank" rel="noopener">{{ u }}</a><span v-else>{{ u }}</span><br>
-                          </template>
+                          <span class="url-text"><template v-for="(p, n) in splitByLinks(d.value)" :key="n"><a v-if="p.isLink" :href="p.text" target="_blank" rel="noopener noreferrer">{{ p.text }}</a><template v-else>{{ p.text }}</template></template></span>
                         </template>
                         <template v-else>{{ d.value }}</template>
                       </dd>
@@ -432,6 +438,9 @@ async function setDone(row: Row, done: boolean) {
 .ok { color: var(--done); font-size: .85rem; }
 .bank-pick { display: flex; align-items: end; gap: .6rem; }
 .bank-link { white-space: nowrap; padding-bottom: .5rem; }
+.row-links { display: flex; flex-wrap: wrap; gap: .1rem .6rem; font-size: .82rem; font-weight: normal; }
+.row-links a { white-space: nowrap; }
+.url-text { white-space: pre-line; overflow-wrap: anywhere; }
 td.no-evidence { color: var(--danger); font-weight: 600; }
 .site-tabs { align-items: center; margin-top: -.4rem; }
 .site-tabs-label { font-size: .85rem; color: var(--muted); }
