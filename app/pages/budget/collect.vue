@@ -183,7 +183,6 @@ function cancelRound() {
         </ul>
       </div>
       <p v-else-if="!reviewer" class="hint">明細の入力・提出はだれでもできます。下の「担当ごとの進み具合」から、入力する担当を開いてください。</p>
-      <ReferenceImport v-if="collecting.round.kind === '本予算'" />
 
       <h2>担当ごとの進み具合</h2>
       <BureauTabs v-model="bureau" :tabs="bureauTabs" />
@@ -220,6 +219,8 @@ function cancelRound() {
           <span v-if="c.s.income" class="base">・収入 {{ formatYen(c.s.income) }}</span>
         </InfoCard>
       </TeamGroup>
+
+      <ReferenceImport v-if="collecting.round.kind === '本予算'" />
     </template>
 
     <template v-else>
