@@ -1,4 +1,3 @@
-import { bureauCodeOf } from '#shared/constants'
 import { flowOf } from '#shared/budgetCompile'
 
 /** 支出の予算明細（執行依頼で選ぶもの）。フォームと選択部品で同じデータを共有する */
@@ -21,15 +20,6 @@ export type BudgetLineView =NonNullable<ReturnType<typeof useBudgetLines>['data'
 
 export const formatYen = (n: number | null | undefined) =>
   n == null ? '' : `${n < 0 ? '-' : ''}¥${Math.abs(n).toLocaleString('ja-JP')}`
-
-/** 執行項目を選んだとき、局が未入力なら最初の明細の局（略称、なければ局名）を入れる */
-export function useBureauFromItems(keys: Ref<string[]>, department: Ref<string>) {
-  const { data: lines } = useBudgetLines()
-  watch(keys, (k) => {
-    if (department.value || !k.length) return
-    department.value = bureauCodeOf(lines.value.find(l => l.key === k[0])?.bureau ?? '')
-  })
-}
 
 /**
  * 取引先が空欄の明細に、フォームで入れた取引先（発注なら通販サイト、立替なら購入先）を入れる。
@@ -70,15 +60,6 @@ export function useAutoFill(target: Ref<string>, source: Ref<string>) {
     target.value = s
     last = s
   }, { immediate: true })
-}
-
-/** 選んだ明細のうち最初のものの担当（表の「担当」列）。担当名の初期値にする */
-export function useTeamOfItems(keys: Ref<string[]>) {
-  const { data: lines } = useBudgetLines()
-  return computed(() => {
-    const byKey = new Map(lines.value.map(l => [l.key, l]))
-    return keys.value.map(k => byKey.get(k)?.team ?? '').find(Boolean) ?? ''
-  })
 }
 
 /** 明細ごとの数量を1つの文字列にまとめる（1件ならそのまま、複数なら「明細名 数量」を並べる） */

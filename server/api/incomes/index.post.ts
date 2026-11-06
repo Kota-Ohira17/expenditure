@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { flowOf } from '../../../shared/budgetCompile'
+import { bureauCodeOf } from '../../../shared/constants'
 import { incomeSchema } from '../../../shared/schemas'
 
 /**
@@ -24,8 +25,9 @@ export default defineEventHandler(async (event) => {
     status: 'pending',
     applicantEmail: user.email,
     applicantName: input.applicantName,
-    department: input.department,
-    inCharge: input.inCharge,
+    // 局・担当は、明細を選んだときはその明細のもの
+    department: (line && bureauCodeOf(line.bureau)) || input.department,
+    inCharge: line?.team || input.inCharge,
     lineKey: line?.key ?? null,
     itemId: line?.itemId ?? '',
     itemNumber: line?.itemNumber ?? input.itemNumber,

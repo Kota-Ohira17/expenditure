@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   assertCanAddItem(user, round)
   const raw = await readBody(event)
   const body = parseOr400(budgetItemSchema.safeParse(raw))
-  const preExecutionId = typeof raw?.preExecutionId === 'string' ? raw.preExecutionId : ''
+  const preExecutionId = Number.isInteger(raw?.preExecutionId) ? Number(raw.preExecutionId) : 0
   if (preExecutionId) await preExecutionToLink(round, team, preExecutionId, body.flow)
   const [{ latest }, itemNumber] = await Promise.all([roundState(round), allocateItemNumber(round, team, body.kan, body.flow)])
   const row = await writeItem(round, null, {

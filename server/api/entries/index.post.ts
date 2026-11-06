@@ -1,3 +1,4 @@
+import { bureauCodeOf } from '../../../shared/constants'
 import { can } from '../../../shared/roles'
 import { budgetChangeOfItems, changedItems, LARGE_INCREASE } from '../../../shared/constants'
 import { executionRequestSchema } from '../../../shared/schemas'
@@ -9,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const input = parseOr400(executionRequestSchema.safeParse(payload))
 
   const {
-    type, applicantName, department, inCharge, budgetLineKeys, itemNumber: manualItemNumber, itemName, remark, deadline,
+    type, applicantName, department: writtenBureau, inCharge: writtenTeam, budgetLineKeys, itemNumber: manualItemNumber, itemName, remark, deadline,
     itemAmounts, itemQuantities, itemVendors: _itemVendors, budgetCommitteeApproved, preExecution, preExecutionReason, budgetPath,
     requestBudgetChange, budgetChangeReason,
     ...rest
@@ -19,6 +20,11 @@ export default defineEventHandler(async (event) => {
   const { itemNumber, lines } = preExecution
     ? { itemNumber: '予算前執行', lines: [] }
     : await resolveBudgetLines(budgetLineKeys, manualItemNumber)
+
+  // 局・担当は、明細を選んだときは最初の明細のもの
+  const picked = lines[0]
+  const department = picked ? bureauCodeOf(picked.bureau) || writtenBureau : writtenBureau
+  const inCharge = picked?.team || writtenTeam
 
   // 発注の数量: 予算の表に数量がある明細だけ必須
   if (type === '発注') requireItemQuantities(lines, itemQuantities)
@@ -61,7 +67,6 @@ export default defineEventHandler(async (event) => {
     },
     attachmentId,
   }, lines, input)
-  if (preExecution) await recordPreExecution(entry, user)
   // 執行依頼は受け付けたので、予算の変更の申請で失敗しても依頼は取り消さない（申請できなかった明細を返す）
   const budgetChangeRequests = changed.length && requestBudgetChange
     ? await requestChangesFromEntry(entry, changed, user, budgetChangeReason)

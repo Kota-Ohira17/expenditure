@@ -12,7 +12,9 @@ const date = z.string({ error: '日付を入力してください。' }).regex(/
 /** 日付、または日付＋時刻（執行希望日時） */
 const dateTime = z.string({ error: '日時を入力してください。' }).regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, '日時を入力してください。')
 /** 局（略称、または略称のない局は予算の局名）。選択肢は取り込んだ予算によって変わるので文字列で受ける */
-const bureau = z.string({ error: '局を選んでください。' }).trim().min(1, '局を選んでください。').max(30)
+/** 局・担当は、明細を選ばないときだけ入力する（選んだときはサーバーで明細から決める） */
+const optionalBureau = z.string().trim().max(30).default('')
+const optionalTeam = z.string().trim().max(200).default('')
 const yen = z.coerce.number({ error: '金額を数字で入力してください。' }).int('整数で入力してください。').positive('金額を入力してください。')
 
 export const ITEM_NUMBER_PATTERN = /^out-?\d{2}(-\d{2}){1,2}$/
@@ -48,11 +50,13 @@ export const itemsUpdateSchema = z.object({
   vendors: z.record(z.string(), z.string().trim().max(100).nullable()).default({}),
 })
 
-function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, preExecutionReason: string, quantity?: string }, ctx: z.RefinementCtx) {
+function checkItems(v: { department: string, inCharge: string, budgetLineKeys: string[], itemNumber: string, budgetPath: { kan: string }, preExecution: boolean, preExecutionReason: string, quantity?: string }, ctx: z.RefinementCtx) {
   // 予算前執行は、本予算の確定を待てない理由を必ず書く
   if (v.preExecution && !v.preExecutionReason) ctx.addIssue({ code: 'custom', message: '予算前執行が必要な理由を入力してください。', path: ['preExecutionReason'] })
   // 予算から選んだときの数量は明細ごとに入力する（予算の表に数量がある明細だけ必須。サーバーで確認する）
   if (v.budgetLineKeys.length) return
+  if (!v.department) ctx.addIssue({ code: 'custom', message: '局を選んでください。', path: ['department'] })
+  if (!v.inCharge) ctx.addIssue({ code: 'custom', message: '担当名を入力してください。', path: ['inCharge'] })
   if (v.quantity === '') ctx.addIssue({ code: 'custom', message: '数量を入力してください。', path: ['quantity'] })
   // 予算前執行は、まだ予算の項目がないので選ばない（支出項目名だけ書く）
   if (v.preExecution) return
@@ -63,8 +67,8 @@ function checkItems(v: { budgetLineKeys: string[], itemNumber: string, budgetPat
 
 const base = z.object({
   applicantName: required('申請者氏名'),
-  department: bureau,
-  inCharge: required('担当名'),
+  department: optionalBureau,
+  inCharge: optionalTeam,
   ...items,
   itemName: required('支出項目名'),
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
@@ -142,8 +146,8 @@ export const INCOME_NUMBER_PATTERN = /^in-?\d{2}(-\d{2}){1,2}$/
  */
 export const incomeSchema = z.object({
   applicantName: required('記録する人の氏名'),
-  department: bureau,
-  inCharge: required('担当名'),
+  department: optionalBureau,
+  inCharge: optionalTeam,
   budgetLineKey: z.string().trim().default(''),
   itemNumber: z.string().trim().default(''),
   budgetPath: z.object({
@@ -163,6 +167,8 @@ export const incomeSchema = z.object({
 }).superRefine((v, ctx) => {
   if (v.method === '振込' && !v.account) ctx.addIssue({ code: 'custom', message: '振込で受け取った口座を選んでください。', path: ['account'] })
   if (v.budgetLineKey) return
+  if (!v.department) ctx.addIssue({ code: 'custom', message: '局を選んでください。', path: ['department'] })
+  if (!v.inCharge) ctx.addIssue({ code: 'custom', message: '担当名を入力してください。', path: ['inCharge'] })
   if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '収入の項目を予算から選んでください。', path: ['budgetLineKey'] })
   else if (!v.budgetPath.kan) ctx.addIssue({ code: 'custom', message: '予算にない収入の款を入力してください。', path: ['budgetPath'] })
   else if (!INCOME_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '収入の項目番号は in01-03-02 の形式で入力してください。', path: ['itemNumber'] })

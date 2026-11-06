@@ -32,13 +32,11 @@ const nameEdited = ref(false)
 const numberEdited = ref(false)
 const done = ref('')
 
-/** 明細を選んだら、収入項目名と（空なら）局・担当を入れる */
+/** 明細を選んだら、収入項目名を入れる（局・担当はサーバーで明細から決める） */
 watch(() => form.budgetLineKey, (key) => {
   const line = lines.value.find(l => l.key === key)
   if (!line) return
   if (!nameEdited.value) form.itemName = line.label
-  if (!form.department) form.department = bureauCodeOf(line.bureau)
-  if (!form.inCharge) form.inCharge = line.team
 })
 /** 予算にない収入：款〜節から収入項目名を作り、局・担当・款から項目番号の候補を取る */
 watch(() => form.budgetPath, (p) => {
@@ -95,10 +93,6 @@ async function onSubmit() {
       <fieldset>
         <legend>記録する人</legend>
         <label><span>記録する人の氏名<span class="req">*</span></span><input v-model="form.applicantName" class="w-m" required></label>
-        <div class="row">
-          <BureauField v-model="form.department" all />
-          <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
-        </div>
       </fieldset>
 
       <fieldset>
@@ -109,6 +103,10 @@ async function onSubmit() {
         </div>
         <template v-if="useManual">
           <p class="hint">{{ lines.length ? '予算にない収入の款・項・目・節と項目番号を書いてください。' : '収入の予算がまだないので、項目を手入力してください。' }}</p>
+          <div class="row">
+            <BureauField v-model="form.department" all />
+            <label><span>担当名<span class="req">*</span></span><input v-model="form.inCharge" placeholder="例：zas" required></label>
+          </div>
           <div class="path">
             <label><span>款<span class="req">*</span></span><input v-model="form.budgetPath.kan" required></label>
             <label><span>項</span><input v-model="form.budgetPath.kou"></label>
@@ -122,7 +120,7 @@ async function onSubmit() {
         </template>
         <template v-else>
           <p class="hint">入ってきたお金に当たる明細を、表から1つ選んでください。</p>
-          <BudgetPicker v-model="pickedKeys" flow="income" single :preferred-bureau="form.department" />
+          <BudgetPicker v-model="pickedKeys" flow="income" single />
         </template>
         <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" class="w-m" required @input="nameEdited = true"></label>
       </fieldset>
