@@ -152,11 +152,6 @@ async function repointLineKeys(lines: Pick<BudgetLine, 'key' | 'itemNumber' | 'i
     const numbers = await db.select({ itemNumber: schema.entryItems.itemNumber }).from(schema.entryItems).where(eq(schema.entryItems.entryId, entryId))
     await db.update(schema.entries).set({ itemNumber: formatItemNumbers(numbers.map(n => n.itemNumber)) }).where(eq(schema.entries.id, entryId))
   }
-  const incomes = await db.select({ id: schema.incomeRecords.id, itemId: schema.incomeRecords.itemId, lineKey: schema.incomeRecords.lineKey, itemNumber: schema.incomeRecords.itemNumber }).from(schema.incomeRecords)
-  for (const i of incomes) {
-    const line = i.lineKey ? stale(i) : null
-    if (line) await db.update(schema.incomeRecords).set({ lineKey: line.key, itemNumber: line.itemNumber }).where(eq(schema.incomeRecords.id, i.id))
-  }
 }
 
 /**
@@ -186,17 +181,15 @@ export function nextItemNumber(used: Map<string, Pick<BudgetItemRow, 'bureau' | 
 export async function numbersInUse(round: Pick<BudgetRound, 'id' | 'kind' | 'term'> | null, teams: Pick<BudgetTeam, 'bureau' | 'team' | 'nameJa'>[]) {
   const db = useDb()
   const term = round?.term ?? BUDGET_TERM
-  const [budgeted, entries, incomes, references, issued] = await Promise.all([
+  const [budgeted, entries, references, issued] = await Promise.all([
     usedNumbers(round, term),
     db.select({ itemNumber: schema.entries.itemNumber, department: schema.entries.department, inCharge: schema.entries.inCharge, details: schema.entries.details })
       .from(schema.entries).where(or(like(schema.entries.itemNumber, 'out%'), like(schema.entries.itemNumber, 'in%'))),
-    db.select({ itemNumber: schema.incomeRecords.itemNumber, department: schema.incomeRecords.department, inCharge: schema.incomeRecords.inCharge, details: schema.incomeRecords.details })
-      .from(schema.incomeRecords),
     db.select({ itemNumber: schema.budgetReferences.itemNumber }).from(schema.budgetReferences),
     db.select({ itemNumber: schema.issuedItemNumbers.itemNumber }).from(schema.issuedItemNumbers).where(eq(schema.issuedItemNumbers.term, term)),
   ])
   const used: Map<string, Pick<BudgetItemRow, 'bureau' | 'team' | 'kan'>> = new Map(budgeted)
-  for (const e of [...entries, ...incomes]) {
+  for (const e of entries) {
     if (used.has(e.itemNumber)) continue
     const bureau = bureauNameOf(e.department)
     const name = e.inCharge.trim().toLowerCase()

@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   const db = useDb()
   const entry = await db.query.entries.findFirst({ where: eq(schema.entries.id, id) })
-  if (!entry || !canSeeEntry(user, entry)) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
+  if (!entry || entry.kind === 'income' || !canSeeEntry(user, entry)) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
   if (entry.kind !== 'execution') throw createError({ statusCode: 400, message: 'この申請には証憑を付けられません。' })
 
   const amount = input.amount === '' ? null : input.amount

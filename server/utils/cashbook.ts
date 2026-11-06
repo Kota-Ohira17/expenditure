@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import type { CashAccount, CashbookKind } from '../../shared/constants'
 import { CASH_ACCOUNTS } from '../../shared/constants'
 import { accountOfIncome, accountOfPayment } from '../../shared/cashbook'
@@ -59,8 +59,8 @@ export function executedAmount(entry: Awaited<ReturnType<typeof withItems>>[numb
 export async function buildCashbook() {
   const db = useDb()
   const [done, incomes, records] = await Promise.all([
-    db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).then(withItems),
-    db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')),
+    db.select().from(schema.entries).where(and(eq(schema.entries.status, 'done'), ne(schema.entries.kind, 'income'))).then(withItems),
+    listIncomes(eq(schema.entries.status, 'done')),
     db.select().from(schema.cashbookRecords).orderBy(asc(schema.cashbookRecords.date), asc(schema.cashbookRecords.id)),
   ])
 
@@ -122,7 +122,7 @@ export async function buildCashbook() {
   }))
 
   /** まだ執行していない執行依頼・立替の返金の金額（これから出ていく予定のお金。口座ごとには分けない） */
-  const pending = await db.select().from(schema.entries).where(eq(schema.entries.status, 'pending')).then(withItems)
+  const pending = await db.select().from(schema.entries).where(and(eq(schema.entries.status, 'pending'), ne(schema.entries.kind, 'income'))).then(withItems)
   const pendingOut = { count: pending.length, total: pending.reduce((s, e) => s + (executedAmount(e) ?? 0), 0) }
 
   return { accounts, rows, checks, unknown, pendingOut }

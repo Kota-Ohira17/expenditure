@@ -239,6 +239,13 @@
       "when": 1793953777204,
       "tag": "0033_item_id",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1793955357972,
+      "tag": "0034_merge_incomes_into_entries",
+      "breakpoints": true
     }
   ]
 }

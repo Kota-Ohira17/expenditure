@@ -1,4 +1,4 @@
-import { and, asc, eq, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import { PAYMENT_TYPES, VIEWS, type ViewKey } from '../../../shared/constants'
 import { can } from '../../../shared/roles'
 
@@ -12,7 +12,8 @@ export default defineEventHandler(async (event) => {
   const view: ViewKey = raw in VIEWS ? (raw as ViewKey) : 'deadline'
   const e = schema.entries
 
-  const conds: SQL[] = []
+  // 収入の記録は /api/incomes で返す
+  const conds: SQL[] = [ne(e.kind, 'income')]
   if (!can(user.role, 'viewAllEntries')) conds.push(eq(e.applicantEmail, user.email))
 
   // 期限が近い順（期限なしは最後）
@@ -51,5 +52,12 @@ export default defineEventHandler(async (event) => {
     .where(and(...conds))
     .orderBy(...orderBy)
 
-  return (await withEvidences(await withItems(rows))).map(r => toPublicEntry(r, can(user.role, 'viewBankAccount')))
+  const views = await withEvidences(await withItems(rows))
+  // 明細に書いてある商品のリンクを、今の予算から付ける
+  const keys = [...new Set(views.flatMap(r => r.items.map(i => i.lineKey)))]
+  const lines = keys.length
+    ? await useDb().select({ key: schema.budgetLines.key, link: schema.budgetLines.link }).from(schema.budgetLines).where(inArray(schema.budgetLines.key, keys))
+    : []
+  const linkOf = new Map(lines.map(l => [l.key, l.link]))
+  return views.map(r => toPublicEntry({ ...r, items: r.items.map(i => ({ ...i, link: linkOf.get(i.lineKey) ?? '' })) }, can(user.role, 'viewBankAccount')))
 })

@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNT_TITLES } from '../../shared/constants'
 import { accountOfIncome, accountOfPayment } from '../../shared/cashbook'
@@ -66,8 +66,8 @@ const pathKan = (details: unknown) => (details as { budgetPath?: { kan?: string 
 export async function buildJournals() {
   const db = useDb()
   const [done, incomes, records, manuals, budgetLines] = await Promise.all([
-    db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).then(withItems),
-    db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')),
+    db.select().from(schema.entries).where(and(eq(schema.entries.status, 'done'), ne(schema.entries.kind, 'income'))).then(withItems),
+    listIncomes(eq(schema.entries.status, 'done')),
     db.select().from(schema.cashbookRecords).orderBy(asc(schema.cashbookRecords.date), asc(schema.cashbookRecords.id)),
     db.select().from(schema.manualJournals).orderBy(asc(schema.manualJournals.date), asc(schema.manualJournals.id)),
     db.select({ key: schema.budgetLines.key, kan: schema.budgetLines.kan }).from(schema.budgetLines),
