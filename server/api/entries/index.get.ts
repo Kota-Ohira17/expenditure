@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { PAYMENT_TYPES, VIEWS, type ViewKey } from '../../../shared/constants'
 import { can } from '../../../shared/roles'
 
@@ -12,8 +12,7 @@ export default defineEventHandler(async (event) => {
   const view: ViewKey = raw in VIEWS ? (raw as ViewKey) : 'deadline'
   const e = schema.entries
 
-  // 収入の記録は /api/incomes で返す
-  const conds: SQL[] = [ne(e.kind, 'income')]
+  const conds: SQL[] = []
   if (!can(user.role, 'viewAllEntries')) conds.push(eq(e.applicantEmail, user.email))
 
   // 期限が近い順（期限なしは最後）

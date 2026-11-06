@@ -6,18 +6,17 @@ export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
   const db = useDb()
-  const income = await findIncome(id)
+  const income = await db.query.incomeRecords.findFirst({ where: eq(schema.incomeRecords.id, id) })
   if (!income) throw createError({ statusCode: 404, message: '収入の記録が見つかりません。' })
   const staff = can(user.role, 'executeEntries')
   if (!staff && (income.applicantEmail !== user.email || income.status !== 'pending')) {
     throw createError({ statusCode: 403, message: '取り消せるのは、確認待ちの間の記録した本人と、財務局長・管理者です。' })
   }
-  const files = await db.select().from(schema.evidenceFiles).where(eq(schema.evidenceFiles.entryId, id))
+  const files = await db.select().from(schema.incomeFiles).where(eq(schema.incomeFiles.incomeId, id))
   await db.batch([
-    db.delete(schema.evidenceFiles).where(eq(schema.evidenceFiles.entryId, id)),
+    db.delete(schema.incomeFiles).where(eq(schema.incomeFiles.incomeId, id)),
     db.delete(schema.attachments).where(inArray(schema.attachments.id, files.length ? files.map(f => f.attachmentId) : [-1])),
-    db.delete(schema.entryItems).where(eq(schema.entryItems.entryId, id)),
-    db.delete(schema.entries).where(eq(schema.entries.id, id)),
+    db.delete(schema.incomeRecords).where(eq(schema.incomeRecords.id, id)),
   ])
   return { ok: true }
 })

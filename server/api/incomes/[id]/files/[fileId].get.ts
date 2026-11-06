@@ -6,8 +6,8 @@ export default defineEventHandler(async (event) => {
   const id = Number(getRouterParam(event, 'id'))
   const fileId = Number(getRouterParam(event, 'fileId'))
   const db = useDb()
-  const f = await db.query.evidenceFiles.findFirst({ where: and(eq(schema.evidenceFiles.id, fileId), eq(schema.evidenceFiles.entryId, id)) })
-  if (!f || !await findIncome(id)) throw createError({ statusCode: 404 })
+  const f = await db.query.incomeFiles.findFirst({ where: and(eq(schema.incomeFiles.id, fileId), eq(schema.incomeFiles.incomeId, id)) })
+  if (!f) throw createError({ statusCode: 404 })
   const file = await db.query.attachments.findFirst({ where: eq(schema.attachments.id, f.attachmentId) })
   if (!file) throw createError({ statusCode: 404 })
 

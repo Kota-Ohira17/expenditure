@@ -1,7 +1,5 @@
 export const PAYMENT_TYPES = ['振込', '発注', '立替', '現金執行', 'カード決済', 'その他'] as const
 export type PaymentType = (typeof PAYMENT_TYPES)[number]
-/** entries.type に入る値。収入の記録（kind=income）は「収入」 */
-export const ENTRY_TYPES = [...PAYMENT_TYPES, '収入'] as const
 
 // ---- 以下、Google フォーム「予算執行依頼フォーム」の選択肢に合わせたもの ----
 
