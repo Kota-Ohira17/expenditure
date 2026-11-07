@@ -6,7 +6,7 @@ import { itemsUpdateSchema } from '../../../../shared/schemas'
  * 申請の金額は、すべての明細に執行額が入っていればその合計にそろえる。
  */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'executeEntries')
+  const user = await requirePermission(event, 'executeEntries')
   const id = Number(getRouterParam(event, 'id'))
   const { amounts, quantities, vendors } = parseOr400(itemsUpdateSchema.safeParse(await readBody(event)))
   const db = useDb()
@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
     }
     return tx.select().from(schema.entries).where(eq(schema.entries.id, id))
   })
+  await syncVoucher('execution', id, user.email)
   const [withItemsEntry] = await withItems([updated!])
   return withItemsEntry
 })

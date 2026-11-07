@@ -18,5 +18,6 @@ export default defineEventHandler(async (event) => {
     db.delete(schema.attachments).where(inArray(schema.attachments.id, files.length ? files.map(f => f.attachmentId) : [-1])),
     db.delete(schema.incomeRecords).where(eq(schema.incomeRecords.id, id)),
   ])
+  await syncVoucher('income', id, user.email)
   return { ok: true }
 })

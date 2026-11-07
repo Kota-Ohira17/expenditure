@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
     createdBy: user.email,
     createdAt: new Date(),
   }).returning()
+  await syncVoucher('manual', journal!.id, user.email)
   setResponseStatus(event, 201)
   return journal
 })

@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(schema.incomeRecords.id, id))
     .returning()
   if (!updated) throw createError({ statusCode: 404, message: '収入の記録が見つかりません。' })
+  await syncVoucher('income', id, user.email)
   const [view] = await withIncomeFiles([updated])
   return view
 })
