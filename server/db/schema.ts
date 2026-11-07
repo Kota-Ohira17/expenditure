@@ -1,4 +1,5 @@
-import { blob, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
+import { blob, integer, primaryKey, real, sqliteTable, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNTS, PAYMENT_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
@@ -245,6 +246,44 @@ export const manualJournals = sqliteTable('manual_journals', {
 })
 
 export type ManualJournal = typeof manualJournals.$inferSelect
+
+/**
+ * ⑬総勘定元帳DB。確定した仕訳を1行ずつ持つ（ERPNext の GL Entry にならう）。
+ * もとの記録（③執行依頼・⑧収入・⑨出納帳・⑩手入力の仕訳）とは voucher_type・voucher_id で結ぶ。
+ * 行は書き換えない。訂正は、もとの行に is_cancelled を付け、貸借を入れ替えた取り消しの行と新しい行を足す。帳簿に出すのは is_cancelled のない行だけ。
+ */
+export const GL_VOUCHER_TYPES = ['execution', 'income', 'cashbook', 'manual'] as const
+export const glEntries = sqliteTable('gl_entries', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** お金が動いた日（YYYY-MM-DD） */
+  postingDate: text('posting_date').notNull(),
+  /** 勘定科目と区分（資産・負債・純資産・収入・支出） */
+  account: text('account').notNull(),
+  accountKind: text('account_kind').$type<AccountKind>().notNull(),
+  debit: integer('debit').notNull().default(0),
+  credit: integer('credit').notNull().default(0),
+  voucherType: text('voucher_type', { enum: GL_VOUCHER_TYPES }).notNull(),
+  voucherId: integer('voucher_id').notNull(),
+  /** 執行・収入の番号（E-001・I-001）。ほかは空 */
+  voucherNo: text('voucher_no').notNull().default(''),
+  /** 出納帳の記録の種類（opening・transfer・adjust）。ほかは空 */
+  voucherSubtype: text('voucher_subtype').notNull().default(''),
+  /** その仕訳の中の行の順番 */
+  lineNo: integer('line_no').notNull(),
+  /** 摘要 */
+  remarks: text('remarks').notNull().default(''),
+  /** どの局・担当の分か（ERPNext の Cost Center にあたる。執行・収入だけ） */
+  bureau: text('bureau').notNull().default(''),
+  team: text('team').notNull().default(''),
+  isCancelled: integer('is_cancelled', { mode: 'boolean' }).notNull().default(false),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, t => [
+  // 同じ記録の同じ行が二重に入らないように（有効な行だけ）
+  uniqueIndex('gl_entries_active_line').on(t.voucherType, t.voucherId, t.lineNo).where(sql`is_cancelled = 0`),
+  index('gl_entries_voucher').on(t.voucherType, t.voucherId),
+])
+export type GlEntry = typeof glEntries.$inferSelect
 
 /**
  * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。
